@@ -1,0 +1,13 @@
+{
+    "symbols": ["XAUUSDm", "BTCUSDm", "GBPUSDm", "EURUSDm"],
+    "timeframes": ["M1", "M15", "M45", "H1", "H4", "D1"],
+    "atr_period": 14,
+    "risk_percent": 3.0,
+    "sma_short_period": 50,
+    "sma_long_period": 200,
+    "supply_demand_window": 20,
+    "liquidity_sweep_period": 20,
+    "fvg_gap_threshold": 0.001,
+    "fibonacci_levels": [0.5, 0.618],
+    "bars": 500
+}
