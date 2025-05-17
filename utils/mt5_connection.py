@@ -12,7 +12,7 @@ def connect_mt5():
         bool: True if connection successful, False otherwise
     """
     try:
-        if not mt5.initialize(login=242854137, password="Danny@0011", server="Exness-MT5Trial"):
+        if not mt5.initialize(login=247242118, password="Danny@0011", server="Exness-MT5Trial"):
             logger.error(f"MT5 initialization failed: {mt5.last_error()}")
             return False
         logger.info("MT5 connection established")

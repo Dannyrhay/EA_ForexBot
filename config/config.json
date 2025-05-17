@@ -1,13 +1,13 @@
 {
   "symbols": ["XAUUSDm", "BTCUSDm", "GBPUSDm", "EURUSDm", "ETHUSDm"],
-  "timeframes": ["M1", "M15"],
+  "timeframes": ["M1", "M5", "M15"], 
   "higher_timeframe": "D1",
   "risk_params": {
-    "BTCUSDm": { "max_risk": 0.1, "volatility_window": 20 },
-    "GBPUSDm": { "max_risk": 0.05, "volatility_window": 50 },
-    "XAUUSDm": { "max_risk": 0.07, "volatility_window": 30 },
-    "EURUSDm": { "max_risk": 0.05, "volatility_window": 50 },
-    "ETHUSDm": { "max_risk": 0.05, "volatility_window": 50 }
+    "BTCUSDm": { "max_risk": 0.02, "volatility_window": 20, "volatility_adjustment": 1.5 },
+    "GBPUSDm": { "max_risk": 0.01, "volatility_window": 50, "volatility_adjustment": 1.0 },
+    "XAUUSDm": { "max_risk": 0.015, "volatility_window": 30, "volatility_adjustment": 1.2 },
+    "EURUSDm": { "max_risk": 0.01, "volatility_window": 50, "volatility_adjustment": 1.0 },
+    "ETHUSDm": { "max_risk": 0.02, "volatility_window": 50, "volatility_adjustment": 1.3 }
   },
   "atr_period": 14,
   "risk_percent": 1.0,
@@ -17,9 +17,9 @@
   "liquidity_sweep_period": 10,
   "fvg_gap_threshold": 0.0003,
   "fibonacci_levels": [0.236, 0.382, 0.618],
-  "bars": 500,
-  "cooldown_period": 15,
-  "ml_training_window": 120,
+  "bars": 1000,
+  "cooldown_period_minutes": 15,
+  "ml_training_window": 80,
   "snr_window": 10,
   "snr_freshness_window": 3,
   "snr_threshold": 0.003,
@@ -30,5 +30,60 @@
   "volume_factor": 1.5,
   "smc_min_ob_size": 0.0003,
   "smc_trade_cooldown": 30,
-  "max_consecutive_losses": 3
+  "max_consecutive_losses": 3,
+  "monitoring_interval_seconds": 60,
+  "error_sleep_interval_seconds": 300,
+  "ml_confidence_thresholds": {
+    "XAUUSDm": 0.10, "BTCUSDm": 0.10, "ETHUSDm": 0.10,
+    "GBPUSDm": 0.05, "EURUSDm": 0.05
+   },
+  "consensus_threshold": {
+    "low_vol": 1.0, 
+    "high_vol": 1.5, 
+    "vol_split": 0.005 
+  },
+  "consensus_dominance_factor": 1.8,
+  "strategy_boost_factor": {
+    "SMC": 1.5,
+    "MalaysianSnR": 1.3
+  },
+  "trading_hours": {
+    "XAUUSDm": {"days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], "start": "00:05", "end": "22:55"},
+    "GBPUSDm": {"days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], "start": "00:05", "end": "22:55"},
+    "EURUSDm": {"days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], "start": "00:05", "end": "22:55"},
+    "BTCUSDm": {"days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], "start": "00:00", "end": "23:59"},
+    "ETHUSDm": {"days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], "start": "00:00", "end": "23:59"}
+  },
+  "global_retrain_hours": 12,
+  "initial_training_bars": 20000,
+  "retrain_data_bars": 10000,
+  "ml_prediction_horizon": 16,
+  "ml_profit_thresholds": {
+    "XAUUSDm": 0.5, "BTCUSDm": 0.7, "ETHUSDm": 0.7,
+    "GBPUSDm": 0.2, "EURUSDm": 0.2, "default": 0.3 
+  },
+
+  "enable_general_auto_profit_close": false, 
+  "general_auto_close_profit_percent_entry_min": 60.0,
+  "general_auto_close_profit_percent_entry_max": 70.0,
+  "enable_general_auto_loss_close": false, 
+  "general_auto_close_max_loss_percent_entry": 55.0,
+
+  "auto_close_short_tf_profit_take": {
+    "enabled": true,
+    "tp_distance_ratio": 0.5, 
+    "trend_ema_short": 9, 
+    "trend_ema_long": 21,
+    "trend_sma_period": 20 
+  },
+  "auto_close_short_tf_stop_loss": {
+    "enabled": true,
+    "sl_distance_ratio": 0.5 
+  },
+
+  "allow_multiple_trades_if_profitable": true,
+  "max_open_trades_profitable": 4,
+  "min_collective_profit_for_new_trade": 0.01, 
+  "block_same_signal_if_losing": true,
+  "max_open_trades_losing_or_flat": 1
 }
