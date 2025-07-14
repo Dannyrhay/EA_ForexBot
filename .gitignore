@@ -3,6 +3,5 @@ test_mt5_connection.py
 test_smtp.py
 test_strategies.py
 trades.csv
-notifications
-backtest_equity.csv
-backtest_trades.csv
+.env
+__pycache__

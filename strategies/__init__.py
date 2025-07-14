@@ -1,21 +1,25 @@
 from .base_strategy import BaseStrategy
-from .candlestick import CandlestickStrategy
 from .fibonacci import FibonacciStrategy
-from .fvg import FVGStrategy
 from .liquidity_sweep import LiquiditySweepStrategy
 from .sma import SMAStrategy
 from .smc import SMCStrategy
-from .supply_demand import SupplyDemandStrategy
-from .malaysian_snr import MalaysianSnRStrategy  # Added import
+from .malaysian_snr import MalaysianSnRStrategy
+from .adx_strategy import ADXStrategy
+from .keltner_channels_strategy import KeltnerChannelsStrategy
+from .scalping_strategy import ScalpingStrategy
+from .ml_prediction_strategy import MLPredictionStrategy
+from .mean_reversion_scalper import MeanReversionScalper
 
 __all__ = [
     'BaseStrategy',
-    'CandlestickStrategy',
     'FibonacciStrategy',
-    'FVGStrategy',
     'LiquiditySweepStrategy',
     'SMAStrategy',
     'SMCStrategy',
-    'SupplyDemandStrategy',
-    'MalaysianSnRStrategy'  
+    'MalaysianSnRStrategy',
+    'ADXStrategy',
+    'KeltnerChannelsStrategy',
+    'ScalpingStrategy',
+    'MLPredictionStrategy',
+    'MeanReversionScalper'
 ]

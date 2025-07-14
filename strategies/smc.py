@@ -3,213 +3,353 @@ import pandas as pd
 import numpy as np
 from utils.mt5_connection import get_data
 import MetaTrader5 as mt5
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from utils.data_cache import data_cache_instance
+import logging
+
+logger = logging.getLogger(__name__)
 
 class SMCStrategy(BaseStrategy):
-    def __init__(self, name, higher_timeframe='D1', min_ob_size=0.0005, fvg_threshold=0.0005, liquidity_tolerance=0.005, trade_cooldown=30):
+    """
+    This strategy implements an advanced Smart Money Concept (SMC) approach.
+    It moves beyond simple trend following and focuses on identifying high-probability reversals
+    based on a specific sequence of market events:
+    1. Liquidity Sweep: Price takes out a previous high or low.
+    2. Change of Character (CHoCH): A shift in market structure immediately following the sweep.
+    3. Point of Interest (POI) Mitigation: Price returns to the 'causative' Order Block or FVG
+       that was responsible for the CHoCH.
+    The strategy is designed to be patient and only trigger when this full narrative plays out,
+    aligning with the principles from the "Advanced Smart Money Concept" guide.
+    """
+    def __init__(self, name, **kwargs):
         super().__init__(name)
-        self.higher_timeframe = higher_timeframe
-        self.min_ob_size = min_ob_size
-        self.fvg_threshold = fvg_threshold
-        self.liquidity_tolerance = liquidity_tolerance
-        self.trade_cooldown = trade_cooldown
-        self.last_trade_times = {}
+        # Default values are set here but will be overridden by set_config
+        self.higher_timeframe = 'H4'
+        self.swing_lookback = 50
+        self.fvg_threshold = 0.0003
+        self.liquidity_tolerance = 0.0005 # How close two highs/lows must be
+        self.poi_search_range = 10 # Bars to look back for a POI after a CHoCH
+        self.trade_cooldown = 30
+        self.last_trade_times = {} # Stores last trade time per symbol to prevent over-trading
         self.mt5_timeframes = {
-            'M1': mt5.TIMEFRAME_M1,
-            'M15': mt5.TIMEFRAME_M15,
-            'M45': mt5.TIMEFRAME_M30,
-            'H1': mt5.TIMEFRAME_H1,
-            'H4': mt5.TIMEFRAME_H4,
-            'D1': mt5.TIMEFRAME_D1
+            'M1': mt5.TIMEFRAME_M1, 'M5': mt5.TIMEFRAME_M5, 'M15': mt5.TIMEFRAME_M15,
+            'M30': mt5.TIMEFRAME_M30, 'H1': mt5.TIMEFRAME_H1,
+            'H4': mt5.TIMEFRAME_H4, 'D1': mt5.TIMEFRAME_D1
         }
+        # Initialize any other parameters from kwargs passed during creation
+        self.set_config(kwargs)
+        logger.debug(f"Advanced SMCStrategy initialized.")
+
+    def set_config(self, config: dict):
+        """Sets strategy parameters from a configuration dictionary."""
+        self.higher_timeframe = config.get('smc_higher_timeframe', self.higher_timeframe)
+        self.swing_lookback = config.get('smc_swing_lookback', self.swing_lookback)
+        self.fvg_threshold = config.get('smc_fvg_threshold', self.fvg_threshold)
+        self.liquidity_tolerance = config.get('smc_liquidity_tolerance', self.liquidity_tolerance)
+        self.poi_search_range = config.get('smc_poi_search_range', self.poi_search_range)
+        self.trade_cooldown = config.get('smc_trade_cooldown', self.trade_cooldown)
+        logger.debug(f"Advanced SMCStrategy config updated: HTF={self.higher_timeframe}, Lookback={self.swing_lookback}, etc.")
+
 
     def in_cooldown(self, symbol):
+        """Checks if the symbol is in a cooldown period after a trade."""
         last_trade = self.last_trade_times.get(symbol)
-        if last_trade and (datetime.now() - last_trade).total_seconds() < self.trade_cooldown * 60:
-            print(f"SMC: Cooldown active for {symbol}")
+        if last_trade and (datetime.now(timezone.utc) - last_trade) < timedelta(minutes=self.trade_cooldown):
+            logger.debug(f"SMC ({symbol}): Cooldown active.")
             return True
         return False
 
-    def identify_market_structure(self, data):
+    def _find_swing_points(self, data: pd.DataFrame, lookback: int):
+        """
+        Identifies swing high and low points using a simple local max/min logic.
+        This is a helper for the main market structure analysis.
+        """
         swings = []
-        for i in range(2, len(data) - 2):
-            if (data['high'].iloc[i] > data['high'].iloc[i-1] and
-                data['high'].iloc[i] > data['high'].iloc[i+1] and
-                data['high'].iloc[i] > data['high'].iloc[i-2] and
-                data['high'].iloc[i] > data['high'].iloc[i+2]):
-                swings.append(('high', i, data['high'].iloc[i]))
-            elif (data['low'].iloc[i] < data['low'].iloc[i-1] and
-                  data['low'].iloc[i] < data['low'].iloc[i+1] and
-                  data['low'].iloc[i] < data['low'].iloc[i-2] and
-                  data['low'].iloc[i] < data['low'].iloc[i+2]):
-                swings.append(('low', i, data['low'].iloc[i]))
+        # Use a rolling window to find local min/max which is more robust
+        data['swing_high'] = data['high'].rolling(window=lookback, center=True).max()
+        data['swing_low'] = data['low'].rolling(window=lookback, center=True).min()
 
-        trend = 'neutral'
-        last_high = last_low = None
-        for swing_type, idx, price in swings:
-            if swing_type == 'high':
-                last_high = price
-                if last_low and data['high'].iloc[-1] > last_high:
-                    trend = 'bullish'
-            elif swing_type == 'low':
-                last_low = price
-                if last_high and data['low'].iloc[-1] < last_low:
-                    trend = 'bearish'
-        return trend, swings
+        for i in range(len(data)):
+            # A swing high is where the current high is the max in its window
+            if data['high'].iloc[i] == data['swing_high'].iloc[i]:
+                swings.append({'type': 'high', 'price': data['high'].iloc[i], 'index': i, 'time': data.index[i]})
+            # A swing low is where the current low is the min in its window
+            elif data['low'].iloc[i] == data['swing_low'].iloc[i]:
+                swings.append({'type': 'low', 'price': data['low'].iloc[i], 'index': i, 'time': data.index[i]})
 
-    def identify_liquidity_zones(self, data):
-        equal_highs = []
-        equal_lows = []
-        window = 10
-        for i in range(window, len(data)):
-            highs = data['high'].iloc[i-window:i]
-            lows = data['low'].iloc[i-window:i]
-            current_price = data['close'].iloc[i]
-            if max(highs) - min(highs) < self.liquidity_tolerance * current_price:
-                equal_highs.append((i, max(highs)))
-            if max(lows) - min(lows) < self.liquidity_tolerance * current_price:
-                equal_lows.append((i, min(lows)))
-            round_level = round(current_price / 0.005) * 0.005
-            if abs(current_price - round_level) / current_price < self.liquidity_tolerance:
-                equal_highs.append((i, round_level))
-                equal_lows.append((i, round_level))
-        return equal_highs, equal_lows
+        # Deduplicate consecutive identical swings
+        if not swings: return []
+        unique_swings = [swings[0]]
+        for i in range(1, len(swings)):
+            if swings[i]['type'] != swings[i-1]['type']:
+                unique_swings.append(swings[i])
+        return unique_swings
 
-    def identify_order_blocks(self, data, trend, swings):
-        order_blocks = []
-        for i in range(3, len(data) - 1):
-            if trend == 'bullish':
-                if (data['close'].iloc[i-1] < data['open'].iloc[i-1] and
-                    data['close'].iloc[i] > data['open'].iloc[i] and
-                    data['close'].iloc[i] > data['open'].iloc[i-1] and
-                    data['open'].iloc[i] < data['close'].iloc[i-1] and
-                    (data['high'].iloc[i-1] - data['low'].iloc[i-1]) / data['close'].iloc[i] >= self.min_ob_size):
-                    ob_low = data['low'].iloc[i-1]
-                    ob_high = data['high'].iloc[i-1]
-                    order_blocks.append(('bullish', i-1, ob_low, ob_high))
-            elif trend == 'bearish':
-                if (data['close'].iloc[i-1] > data['open'].iloc[i-1] and
-                    data['close'].iloc[i] < data['open'].iloc[i] and
-                    data['close'].iloc[i] < data['open'].iloc[i-1] and
-                    data['open'].iloc[i] > data['close'].iloc[i-1] and
-                    (data['high'].iloc[i-1] - data['low'].iloc[i-1]) / data['close'].iloc[i] >= self.min_ob_size):
-                    ob_low = data['low'].iloc[i-1]
-                    ob_high = data['high'].iloc[i-1]
-                    order_blocks.append(('bearish', i-1, ob_low, ob_high))
-        return order_blocks
 
-    def identify_fvgs(self, data):
-        fvgs = []
-        for i in range(3, len(data)):
-            prev_high = data['high'].iloc[i-2]
-            curr_low = data['low'].iloc[i]
-            gap_size = (prev_high - curr_low) / data['close'].iloc[i]
-            second_candle_body = abs(data['close'].iloc[i-1] - data['open'].iloc[i-1])
-            avg_body = (abs(data['close'].iloc[i-2] - data['open'].iloc[i-2]) +
-                        abs(data['close'].iloc[i] - data['open'].iloc[i])) / 2
-            if (gap_size >= self.fvg_threshold and
-                second_candle_body >= 2 * avg_body):
-                fvgs.append(('bullish', i, curr_low, prev_high))
-            prev_low = data['low'].iloc[i-2]
-            curr_high = data['high'].iloc[i]
-            gap_size = (curr_high - prev_low) / data['close'].iloc[i]
-            if (gap_size >= self.fvg_threshold and
-                second_candle_body >= 2 * avg_body):
-                fvgs.append(('bearish', i, prev_low, curr_high))
-        return fvgs
+    def analyze_market_structure(self, data: pd.DataFrame):
+        """
 
-    def get_higher_tf_context(self, symbol, bars=100):
-        mt5_tf = self.mt5_timeframes.get(self.higher_timeframe, mt5.TIMEFRAME_D1)
-        data = get_data(symbol, mt5_tf, bars)
-        if data is None or len(data) < 50:
-            print(f"SMC: No D1 data for {symbol}")
-            return None, []
-        trend, swings = self.identify_market_structure(data)
-        key_levels = [(s[1], s[2]) for s in swings]
-        return trend, key_levels
+        Analyzes the data to identify the current market structure, including trend,
+        Breaks of Structure (BOS), and Changes of Character (CHoCH). This is the core
+        of the new advanced logic.
+
+        Returns:
+            dict: A dictionary containing the market structure analysis, e.g.,
+                  {'trend': 'bullish', 'last_event': 'BOS', 'event_index': 1480,
+                   'major_high': 1.2345, 'major_low': 1.2200}
+        """
+        swing_points = self._find_swing_points(data, self.swing_lookback)
+        if len(swing_points) < 4:
+            return {'trend': 'choppy', 'last_event': None}
+
+        # Identify HH, HL, LH, LL
+        structural_points = []
+        # Start with the first two points to establish a direction
+        if swing_points[1]['type'] == 'high' and swing_points[0]['type'] == 'low':
+             structural_points.append({'type': 'L', 'price': swing_points[0]['price'], 'index': swing_points[0]['index']})
+             structural_points.append({'type': 'H', 'price': swing_points[1]['price'], 'index': swing_points[1]['index']})
+        else: # Skip until we have a clear Low-High or High-Low sequence
+            swing_points = swing_points[1:]
+            if not swing_points or len(swing_points) < 2: return {'trend': 'choppy', 'last_event': None}
+            structural_points.append({'type': 'H' if swing_points[0]['type'] == 'high' else 'L', 'price': swing_points[0]['price'], 'index': swing_points[0]['index']})
+            structural_points.append({'type': 'L' if swing_points[1]['type'] == 'low' else 'H', 'price': swing_points[1]['price'], 'index': swing_points[1]['index']})
+
+
+        last_h = None
+        last_l = None
+
+        for i in range(2, len(swing_points)):
+            current_swing = swing_points[i]
+            prev_swing = swing_points[i-1]
+            prev_prev_swing = swing_points[i-2]
+
+            if current_swing['type'] == 'high' and prev_swing['type'] == 'low':
+                if current_swing['price'] > prev_prev_swing['price'] and prev_swing['price'] > swing_points[i-3]['price'] if i > 2 else True:
+                   last_h = {'price': current_swing['price'], 'index': current_swing['index'], 'type': 'HH'}
+                   last_l = {'price': prev_swing['price'], 'index': prev_swing['index'], 'type': 'HL'}
+                elif current_swing['price'] < prev_prev_swing['price'] and prev_swing['price'] < swing_points[i-3]['price'] if i > 2 else True:
+                   last_h = {'price': current_swing['price'], 'index': current_swing['index'], 'type': 'LH'}
+                   last_l = {'price': prev_swing['price'], 'index': prev_swing['index'], 'type': 'LL'}
+
+
+        # Now, analyze the most recent price action against the established structure
+        last_major_high = max([p['price'] for p in swing_points if p['type'] == 'high'][-3:]) if swing_points else 0
+        last_major_low = min([p['price'] for p in swing_points if p['type'] == 'low'][-3:]) if swing_points else 0
+
+        # Define latest swing points for CHoCH/BOS detection
+        recent_highs = [p for p in swing_points if p['type'] == 'high']
+        recent_lows = [p for p in swing_points if p['type'] == 'low']
+
+        if len(recent_highs) < 2 or len(recent_lows) < 2:
+            return {'trend': 'choppy', 'last_event': None}
+
+        last_high = recent_highs[-1]
+        prev_high = recent_highs[-2]
+        last_low = recent_lows[-1]
+        prev_low = recent_lows[-2]
+
+        # Determine current trend based on last two highs and lows
+        trend = 'choppy'
+        if last_high['price'] > prev_high['price'] and last_low['price'] > prev_low['price']:
+            trend = 'bullish'
+        elif last_high['price'] < prev_high['price'] and last_low['price'] < prev_low['price']:
+            trend = 'bearish'
+
+        result = {
+            'trend': trend,
+            'last_event': None, 'event_index': None, 'event_price': None,
+            'confirmed_high': last_high if trend != 'choppy' else None,
+            'confirmed_low': last_low if trend != 'choppy' else None,
+            'last_swing_high': recent_highs[-1],
+            'last_swing_low': recent_lows[-1],
+        }
+
+        # Detect BOS or CHoCH
+        # Bullish trend: Did we break the last high (BOS) or the last low (CHoCH)?
+        if trend == 'bullish':
+            if data['high'].iloc[-1] > last_high['price']:
+                result['last_event'] = 'BOS'
+                result['event_price'] = last_high['price']
+                result['event_index'] = last_high['index']
+            elif data['low'].iloc[-1] < last_low['price']:
+                result['last_event'] = 'CHoCH_Bearish'
+                result['event_price'] = last_low['price']
+                result['event_index'] = last_low['index']
+        # Bearish trend: Did we break the last low (BOS) or the last high (CHoCH)?
+        elif trend == 'bearish':
+            if data['low'].iloc[-1] < last_low['price']:
+                result['last_event'] = 'BOS'
+                result['event_price'] = last_low['price']
+                result['event_index'] = last_low['index']
+            elif data['high'].iloc[-1] > last_high['price']:
+                result['last_event'] = 'CHoCH_Bullish'
+                result['event_price'] = last_high['price']
+                result['event_index'] = last_high['index']
+
+        return result
+
+
+    def find_liquidity_sweep(self, data: pd.DataFrame, structure: dict):
+        """Identifies if a liquidity sweep occurred just before a CHoCH."""
+        if not structure.get('last_event') or 'CHoCH' not in structure['last_event']:
+            return None
+
+        choch_index = structure['event_index']
+        # Look in a small window before the CHoCH
+        search_window = data.iloc[max(0, choch_index - 20):choch_index]
+
+        if structure['last_event'] == 'CHoCH_Bearish': # Bull trend ended, we swept a high
+            # Find the high that was swept
+            relevant_high = structure.get('confirmed_high')
+            if relevant_high and not search_window.empty:
+                # Check if price wicked above the high then closed below
+                if (search_window['high'] > relevant_high['price']).any() and \
+                   (search_window['close'] < relevant_high['price']).any():
+                    logger.debug(f"Liquidity SWEEP confirmed above high at {relevant_high['price']:.4f} before bearish CHoCH.")
+                    return {'type': 'high_sweep', 'price': relevant_high['price']}
+
+        elif structure['last_event'] == 'CHoCH_Bullish': # Bear trend ended, we swept a low
+            relevant_low = structure.get('confirmed_low')
+            if relevant_low and not search_window.empty:
+                 if (search_window['low'] < relevant_low['price']).any() and \
+                    (search_window['close'] > relevant_low['price']).any():
+                    logger.debug(f"Liquidity SWEEP confirmed below low at {relevant_low['price']:.4f} before bullish CHoCH.")
+                    return {'type': 'low_sweep', 'price': relevant_low['price']}
+        return None
+
+
+    def find_causative_poi(self, data: pd.DataFrame, structure: dict):
+        """
+        After a CHoCH, finds the Point of Interest (Order Block or FVG)
+        that caused the structural shift.
+        """
+        if not structure or 'CHoCH' not in (structure.get('last_event') or ''):
+            return None
+
+        choch_index = structure.get('event_index', len(data) - 1)
+        # Search for the POI in the impulsive leg that led to the CHoCH
+        search_start_index = max(0, choch_index - self.poi_search_range)
+        search_window = data.iloc[search_start_index:choch_index + 1]
+
+        # Find FVG (Fair Value Gaps)
+        for i in range(len(search_window) - 2, 0, -1):
+            c1 = search_window.iloc[i-1]
+            c3 = search_window.iloc[i+1]
+            current_index_in_main_df = search_start_index + i
+
+            # Bullish FVG (for a buy setup after a bullish CHoCH)
+            if structure['last_event'] == 'CHoCH_Bullish' and c3['low'] > c1['high']:
+                gap_size = c3['low'] - c1['high']
+                if c1['close'] != 0 and gap_size / c1['close'] >= self.fvg_threshold:
+                    poi = {'type': 'bullish_fvg', 'low': c1['high'], 'high': c3['low'], 'index': current_index_in_main_df}
+                    logger.debug(f"Found causative Bullish FVG POI at index {poi['index']}: [{poi['low']:.4f} - {poi['high']:.4f}]")
+                    return poi
+
+            # Bearish FVG (for a sell setup after a bearish CHoCH)
+            elif structure['last_event'] == 'CHoCH_Bearish' and c1['low'] > c3['high']:
+                gap_size = c1['low'] - c3['high']
+                if c1['close'] != 0 and gap_size / c1['close'] >= self.fvg_threshold:
+                    poi = {'type': 'bearish_fvg', 'low': c3['high'], 'high': c1['low'], 'index': current_index_in_main_df}
+                    logger.debug(f"Found causative Bearish FVG POI at index {poi['index']}: [{poi['low']:.4f} - {poi['high']:.4f}]")
+                    return poi
+
+        # Find Order Block if no FVG is found
+        for i in range(len(search_window) - 1, 0, -1):
+            candle = search_window.iloc[i]
+            prev_candle = search_window.iloc[i-1]
+            current_index_in_main_df = search_start_index + i
+
+            # Bullish OB (last down candle before the up-move causing bullish CHoCH)
+            if structure['last_event'] == 'CHoCH_Bullish' and prev_candle['close'] < prev_candle['open'] and candle['close'] > candle['open']:
+                poi = {'type': 'bullish_ob', 'low': prev_candle['low'], 'high': prev_candle['high'], 'index': current_index_in_main_df - 1}
+                logger.debug(f"Found causative Bullish OB POI at index {poi['index']}: [{poi['low']:.4f} - {poi['high']:.4f}]")
+                return poi
+
+            # Bearish OB (last up candle before the down-move causing bearish CHoCH)
+            elif structure['last_event'] == 'CHoCH_Bearish' and prev_candle['close'] > prev_candle['open'] and candle['close'] < candle['open']:
+                poi = {'type': 'bearish_ob', 'low': prev_candle['low'], 'high': prev_candle['high'], 'index': current_index_in_main_df - 1}
+                logger.debug(f"Found causative Bearish OB POI at index {poi['index']}: [{poi['low']:.4f} - {poi['high']:.4f}]")
+                return poi
+
+        logger.debug("No causative POI found for the recent CHoCH.")
+        return None
+
+    def get_higher_tf_context(self, symbol, bars=200):
+        """Fetches and analyzes the higher timeframe for trend context."""
+        htf_data = get_data(symbol, self.higher_timeframe, bars)
+        if htf_data is None or len(htf_data) < self.swing_lookback * 2:
+            logger.warning(f"SMC ({symbol}): Insufficient {self.higher_timeframe} data for context.")
+            return 'choppy'
+
+        htf_data.set_index('time', inplace=True)
+        htf_structure = self.analyze_market_structure(htf_data)
+        logger.debug(f"SMC ({symbol}): HTF ({self.higher_timeframe}) Context: Trend is {htf_structure.get('trend', 'choppy')}")
+        return htf_structure.get('trend', 'choppy')
+
 
     def get_signal(self, data, symbol=None, timeframe='M5'):
-        try:
-            if self.in_cooldown(symbol):
-                return ('hold', 0.0)
-
-            df = pd.DataFrame(data)
-            if not all(col in df for col in ['open', 'close', 'high', 'low']):
-                print(f"SMC: Missing required columns in data for {symbol} on {timeframe}")
-                return ('hold', 0.0)
-
-            # Step 1: Identify market structure
-            trend, swings = self.identify_market_structure(df)
-            if trend == 'neutral':
-                print(f"SMC: Neutral trend for {symbol} on {timeframe}")
-                return ('hold', 0.0)
-
-            # Step 2: Get D1 context
-            ht_trend, ht_levels = self.get_higher_tf_context(symbol, bars=100)
-            if ht_trend is None:
-                print(f"SMC: No D1 context for {symbol} on {timeframe}")
-                return ('hold', 0.0)
-            if (trend == 'bullish' and ht_trend != 'bullish') or (trend == 'bearish' and ht_trend != 'bearish'):
-                print(f"SMC: Trend misalignment for {symbol} on {timeframe}: {timeframe}={trend}, D1={ht_trend}")
-                return ('hold', 0.0)
-
-            # Step 3: Identify liquidity zones
-            equal_highs, equal_lows = self.identify_liquidity_zones(df)
-            current_price = df['close'].iloc[-1]
-            liquidity_near = False
-            for _, high in equal_highs[-3:]:
-                if abs(high - current_price) / current_price < self.liquidity_tolerance:
-                    liquidity_near = True
-                    break
-            for _, low in equal_lows[-3:]:
-                if abs(low - current_price) / current_price < self.liquidity_tolerance:
-                    liquidity_near = True
-                    break
-            print(f"SMC: Liquidity near for {symbol} on {timeframe}: {liquidity_near}")
-
-            # Step 4: Identify order blocks
-            order_blocks = self.identify_order_blocks(df, trend, swings)
-            valid_ob = None
-            for ob_type, idx, ob_low, ob_high in order_blocks[-2:]:
-                ob_mid = (ob_low + ob_high) / 2
-                for _, level in ht_levels:
-                    if abs(level - ob_mid) / level < self.liquidity_tolerance:
-                        if ((trend == 'bullish' and ob_type == 'bullish' and
-                             ob_low <= current_price <= ob_high) or
-                            (trend == 'bearish' and ob_type == 'bearish' and
-                             ob_low <= current_price <= ob_high)):
-                            valid_ob = (ob_type, ob_low, ob_high)
-                            break
-                if valid_ob:
-                    break
-            if not valid_ob:
-                print(f"SMC: No valid OB for {symbol} on {timeframe}")
-                return ('hold', 0.0)
-            print(f"SMC: Valid OB found for {symbol} on {timeframe}: {valid_ob}")
-
-            # Step 5: Confirm with FVG
-            fvgs = self.identify_fvgs(df)
-            fvg_confirmed = False
-            for fvg_type, idx, fvg_low, fvg_high in fvgs[-2:]:
-                if ((trend == 'bullish' and fvg_type == 'bullish' and
-                     fvg_low <= current_price <= fvg_high and
-                     abs(fvg_low - valid_ob[1]) / current_price < 0.01) or
-                    (trend == 'bearish' and fvg_type == 'bearish' and
-                     fvg_low <= current_price <= fvg_high and
-                     abs(fvg_high - valid_ob[2]) / current_price < 0.01)):
-                    fvg_confirmed = True
-                    break
-            print(f"SMC: FVG confirmed for {symbol} on {timeframe}: {fvg_confirmed}")
-
-            # Step 6: Generate signal
-            strength = 0.9 if (liquidity_near and fvg_confirmed) else 0.8
-            if valid_ob and (fvg_confirmed or liquidity_near):
-                self.last_trade_times[symbol] = datetime.now()
-                signal = 'buy' if trend == 'bullish' else 'sell'
-                print(f"SMC: {signal} signal for {symbol} on {timeframe}, Strength: {strength}")
-                return (signal, strength)
-            print(f"SMC: No signal for {symbol} on {timeframe}: Missing FVG or liquidity")
+        if self.in_cooldown(symbol):
             return ('hold', 0.0)
-        except Exception as e:
-            print(f"SMC: Error in get_signal for {symbol} on {timeframe}: {e}")
+
+        df = pd.DataFrame(data)
+        if 'time' not in df.columns or not all(c in df.columns for c in ['open','high','low','close']):
+            logger.warning(f"SMC ({symbol}, {timeframe}): Data missing required columns.")
             return ('hold', 0.0)
+        df.set_index('time', inplace=True)
+        df.sort_index(inplace=True)
+
+        # 1. Analyze the structure on the current (lower) timeframe
+        ltf_structure = self.analyze_market_structure(df)
+        if not ltf_structure.get('last_event') or 'CHoCH' not in ltf_structure['last_event']:
+            # The primary trigger is not present, so we wait.
+            return ('hold', 0.0)
+
+        logger.info(f"SMC ({symbol}, {timeframe}): Found trigger: {ltf_structure['last_event']} at index {ltf_structure['event_index']}")
+
+        # 2. Find the causative Point of Interest (POI) for this CHoCH
+        poi = self.find_causative_poi(df, ltf_structure)
+        if not poi:
+            logger.debug(f"SMC ({symbol}, {timeframe}): CHoCH occurred, but no clear causative POI found. Holding.")
+            return ('hold', 0.0)
+
+        # 3. Check if the current price is mitigating (testing) this POI
+        current_price = df['close'].iloc[-1]
+        is_mitigating = poi['low'] <= current_price <= poi['high']
+        if not is_mitigating:
+            # We have a valid setup, but price hasn't returned to our entry zone yet.
+            # In a real bot, you would now 'arm' this POI and wait for price to return.
+            # For this signal-based system, we just hold until it enters the zone.
+            logger.debug(f"SMC ({symbol}, {timeframe}): POI identified at [{poi['low']:.4f}-{poi['high']:.4f}], but price {current_price:.4f} is not yet mitigating. Holding.")
+            return ('hold', 0.0)
+
+        logger.info(f"SMC ({symbol}, {timeframe}): Price {current_price:.4f} is MITIGATING POI at [{poi['low']:.4f}-{poi['high']:.4f}]. Proceeding with confirmations.")
+
+        # 4. Gather Confirmations to calculate signal strength
+        strength = 0.7  # Base strength for a confirmed CHoCH + POI mitigation
+        signal = 'hold'
+
+        # Confirmation A: Higher Timeframe Alignment
+        htf_trend = self.get_higher_tf_context(symbol, bars=self.swing_lookback * 4)
+        if (ltf_structure['last_event'] == 'CHoCH_Bullish' and htf_trend == 'bullish') or \
+           (ltf_structure['last_event'] == 'CHoCH_Bearish' and htf_trend == 'bearish'):
+            strength += 0.15
+            logger.debug(f"SMC CONFIRMATION: HTF trend ({htf_trend}) aligns with CHoCH direction. Strength +0.15")
+
+        # Confirmation B: Liquidity Sweep
+        sweep = self.find_liquidity_sweep(df, ltf_structure)
+        if sweep:
+            strength += 0.15
+            logger.debug(f"SMC CONFIRMATION: Liquidity sweep preceded CHoCH. Strength +0.15")
+
+        # Final signal determination
+        if ltf_structure['last_event'] == 'CHoCH_Bullish' and 'bullish' in poi['type']:
+            signal = 'buy'
+        elif ltf_structure['last_event'] == 'CHoCH_Bearish' and 'bearish' in poi['type']:
+            signal = 'sell'
+        else:
+            return ('hold', 0.0)
+
+        self.last_trade_times[symbol] = datetime.now(timezone.utc)
+        logger.info(f"SMC ({symbol}, {timeframe}): FINAL SIGNAL: {signal.upper()} with strength {strength:.2f}")
+        return (signal, min(strength, 1.0))
+

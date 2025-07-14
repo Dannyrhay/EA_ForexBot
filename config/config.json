@@ -1,89 +1,399 @@
 {
-  "symbols": ["XAUUSDm", "BTCUSDm", "GBPUSDm", "EURUSDm", "ETHUSDm"],
-  "timeframes": ["M1", "M5", "M15"], 
-  "higher_timeframe": "D1",
-  "risk_params": {
-    "BTCUSDm": { "max_risk": 0.02, "volatility_window": 20, "volatility_adjustment": 1.5 },
-    "GBPUSDm": { "max_risk": 0.01, "volatility_window": 50, "volatility_adjustment": 1.0 },
-    "XAUUSDm": { "max_risk": 0.015, "volatility_window": 30, "volatility_adjustment": 1.2 },
-    "EURUSDm": { "max_risk": 0.01, "volatility_window": 50, "volatility_adjustment": 1.0 },
-    "ETHUSDm": { "max_risk": 0.02, "volatility_window": 50, "volatility_adjustment": 1.3 }
+  "symbols": [
+    "XAUUSDm"
+  ],
+  "timeframes": [
+    "M1"
+  ],
+  "active_strategies": [
+    "SMA",
+    "SMC",
+    "LiquiditySweep",
+    "Fibonacci",
+    "MalaysianSnR",
+    "BollingerBands",
+    "ADX",
+    "KeltnerChannels",
+    "Scalping",
+    "MLPrediction"
+  ],
+  "mt5_credentials": {
+    "login": 247242118,
+    "password": "YOUR_PASSWORD_HERE",
+    "server": "YOUR_MT5_SERVER_HERE",
+    "mt5_terminal_path": null
   },
-  "atr_period": 14,
-  "risk_percent": 1.0,
+  "bars": 1500,
+  "monitoring_interval_seconds": 1,
+  "error_sleep_interval_seconds": 300,
+  "cooldown_period_minutes": 2,
+  "max_trades_per_symbol": 2,
+  "max_consecutive_trade_failures": 3,
+  "global_retrain_hours": 12,
+  "initial_training_bars": 25000,
+  "retrain_data_bars": 15000,
+  "dxy_symbol": "DXYm",
+  "ml_model_type": "XGBoost",
+  "ml_use_smote": false,
+  "ml_primary_training_timeframe": "M30",
+  "ml_training_window": 120,
+  "ml_prediction_horizon": 20,
+  "ml_target_definition": {
+    "method": "price_change",
+    "params": {
+      "atr_period": 14,
+      "atr_multiplier": 1.0,
+      "change_threshold_percent": 0.4,
+      "prediction_horizon_for_change": 20
+    }
+  },
+  "ml_confidence_thresholds": {
+    "buy": {
+      "default": 0.3,
+      "XAUUSDm": 0.115,
+      "BTCUSDm": 0.6
+    },
+    "sell": {
+      "default": 0.3,
+      "XAUUSDm": 0.115,
+      "BTCUSDm": 0.6
+    }
+  },
+  "ml_prediction_strategy_params": {
+    "enabled": true
+  },
+  "random_forest_params": {
+    "n_estimators": [
+      50,
+      100
+    ],
+    "max_depth": [
+      10,
+      15,
+      20
+    ],
+    "min_samples_split": [
+      10,
+      20,
+      30
+    ]
+  },
+  "xgboost_params": {
+    "n_estimators": [
+      100,
+      200,
+      300
+    ],
+    "max_depth": [
+      3,
+      5,
+      7
+    ],
+    "learning_rate": [
+      0.01,
+      0.1,
+      0.2
+    ],
+    "subsample": [
+      0.7,
+      0.8,
+      0.9
+    ],
+    "colsample_bytree": [0.7, 0.8, 0.9]
+  },
+  "ml_timeseries_splits": 5,
+  "ml_scoring_metric": "f1_weighted",
+  "ml_gridsearch_cv_jobs": -1,
+  "ml_min_samples_for_fit": 100,
+  "features_to_remove_indices": [],
+  "feature_engineering": {
+    "volatility_adjusted_indicators": true,
+    "rate_of_change_periods": [
+      5,
+      10,
+      20
+    ],
+    "time_based_features": true,
+    "dxy_correlation_for_xauusd": true
+  },
+  "risk_percent_per_trade": 0.3,
+  "risk_params": {
+    "BTCUSDm": {
+      "max_risk_per_trade": 0.055,
+      "volatility_adjustment": 1.8
+    },
+    "XAUUSDm": {
+      "max_risk_per_trade": 0.08,
+      "volatility_adjustment": 1.2
+    }
+  },
+  "atr_period_for_sl_tp": 14,
+  "atr_fallback_factor": 0.005,
+  "sl_atr_multiplier": 2.0,
+  "tp_atr_multiplier": 1.5,
+  "risk_reward_ratio": 1.5,
+  "recent_range_window_for_sl_tp": 20,
+  "sl_range_factor": 0.5,
+  "range_fallback_factor": 0.01,
+  "min_stop_multiplier": 1.5,
+  "h1_trend_filter": {
+    "enabled": false,
+    "allow_neutral": false
+  },
+  "scalping_strategy_params": {
+    "ema_short_period": 50,
+    "ema_long_period": 100,
+    "stoch_k_period": 5,
+    "stoch_d_period": 3,
+    "stoch_slowing": 3,
+    "stoch_oversold": 20,
+    "stoch_overbought": 80,
+    "signal_strength": 0.9,
+    "fast_ema_period": 10,
+    "rsi_period": 7,
+    "rsi_oversold": 30,
+    "rsi_overbought": 70,
+    "volume_factor": 1.5,
+    "atr_period_volatility": 14,
+    "min_volatility_factor": 0.0001,
+    "max_volatility_factor": 0.005,
+    "use_volume_filter": false,
+    "use_volatility_filter": false
+  },
+  "mean_reversion_scalper_params": {
+    "bb_window": 20,
+    "bb_std_dev": 2.0,
+    "rsi_period": 14,
+    "rsi_overbought": 70,
+    "rsi_oversold": 30,
+    "stoch_k_period": 5,
+    "stoch_d_period": 3,
+    "stoch_slowing": 3,
+    "stoch_overbought": 80,
+    "stoch_oversold": 20,
+    "signal_strength": 0.85
+  },
+  "fibonacci_golden_zone": {
+    "swing_lookback": 200,
+    "trend_ema_period": 200,
+    "signal_strength": 0.85
+  },
   "sma_short_period": 10,
-  "sma_long_period": 100,
-  "supply_demand_window": 10,
-  "liquidity_sweep_period": 10,
-  "fvg_gap_threshold": 0.0003,
-  "fibonacci_levels": [0.236, 0.382, 0.618],
-  "bars": 1000,
-  "cooldown_period_minutes": 15,
-  "ml_training_window": 80,
-  "snr_window": 10,
-  "snr_freshness_window": 3,
-  "snr_threshold": 0.003,
-  "noise_filter_enabled": true,
+  "sma_long_period": 20,
+  "smc_higher_timeframe": "H4",
+  "smc_swing_lookback": 50,
+  "smc_fvg_threshold": 0.0003,
+  "smc_liquidity_tolerance": 0.0005,
+  "smc_poi_search_range": 10,
+  "smc_trade_cooldown": 2,
+  "liquidity_sweep_params": {
+    "lookback_period": 30,
+    "eq_level_tolerance": 0.0005,
+    "ob_retrace_pct": 0.5,
+    "volume_multiplier": 1.5,
+    "enable_fvg": true,
+    "enable_mss_confirmation": true
+  },
+  "snr_window": 100,
+  "snr_threshold": 0.005,
+  "snr_miss_period": 5,
+  "snr_enable_rejection_filter": true,
+  "snr_enable_miss_filter": true,
+  "snr_enable_engulfing_filter": true,
   "bb_window": 20,
   "bb_std_dev": 2.0,
-  "liquidity_tolerance": 0.005,
-  "volume_factor": 1.5,
-  "smc_min_ob_size": 0.0003,
-  "smc_trade_cooldown": 30,
-  "max_consecutive_losses": 3,
-  "monitoring_interval_seconds": 60,
-  "error_sleep_interval_seconds": 300,
-  "ml_confidence_thresholds": {
-    "XAUUSDm": 0.10, "BTCUSDm": 0.10, "ETHUSDm": 0.10,
-    "GBPUSDm": 0.05, "EURUSDm": 0.05
-   },
-  "consensus_threshold": {
-    "low_vol": 1.0, 
-    "high_vol": 1.5, 
-    "vol_split": 0.005 
+  "adx_period": 14,
+  "adx_di_period": 14,
+  "adx_threshold": 26,
+  "adx_strength_factor": 30,
+  "keltner_ema_period": 20,
+  "keltner_atr_period": 20,
+  "keltner_atr_multiplier": 2,
+  "keltner_signal_strength": 0.7,
+  "adx_signal_filter": {
+    "enabled": true,
+    "min_adx_for_entry": 25,
+    "min_adx_for_entry_BTCUSDm": 20,
+    "require_di_confirmation": true,
+    "filter_mode": "all_others",
+    "strategies_to_filter": [
+      "KeltnerChannels",
+      "BollingerBands",
+      "SMA"
+    ]
   },
-  "consensus_dominance_factor": 1.8,
+  "consensus_threshold": {
+    "default": {
+      "low_vol": 1.0,
+      "high_vol": 1.5,
+      "vol_split": 0.005
+    },
+    "BTCUSDm": {
+      "low_vol": 1.0,
+      "high_vol": 1.4,
+      "vol_split": 0.01
+    }
+  },
   "strategy_boost_factor": {
+    "Scalping": {
+      "M1": 3.0,
+      "M5": 1.5,
+      "M15": 1.0
+    },
     "SMC": 1.5,
-    "MalaysianSnR": 1.3
+    "MalaysianSnR": 1.3,
+    "Fibonacci": 1.2,
+    "SMA": 1.0,
+    "BollingerBands": 1.0,
+    "LiquiditySweep": 1.0,
+    "ADX": 1.2,
+    "KeltnerChannels": 1.0,
+    "MLPrediction": 1.5
+  },
+  "trading_sessions": {
+    "enabled": true,
+    "sessions": {
+      "asian": {
+        "start": "22:31",
+        "end": "08:00"
+      },
+      "london": {
+        "start": "07:00",
+        "end": "16:00"
+      },
+      "ny": {
+        "start": "12:00",
+        "end": "22:29"
+      }
+    },
+    "symbols": {
+      "XAUUSDm": [
+        "asian",
+        "london",
+        "ny"
+      ],
+      "BTCUSDm": [
+        "asian",
+        "london",
+        "ny"
+      ]
+    }
   },
   "trading_hours": {
-    "XAUUSDm": {"days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], "start": "00:05", "end": "22:55"},
-    "GBPUSDm": {"days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], "start": "00:05", "end": "22:55"},
-    "EURUSDm": {"days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], "start": "00:05", "end": "22:55"},
-    "BTCUSDm": {"days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], "start": "00:00", "end": "23:59"},
-    "ETHUSDm": {"days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], "start": "00:00", "end": "23:59"}
+    "XAUUSDm": {
+      "days": [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Sunday"
+      ],
+      "start": "00:00",
+      "end": "23:55"
+    },
+    "BTCUSDm": {
+      "days": [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday"
+      ],
+      "start": "00:00",
+      "end": "23:59"
+    }
   },
-  "global_retrain_hours": 12,
-  "initial_training_bars": 20000,
-  "retrain_data_bars": 10000,
-  "ml_prediction_horizon": 16,
-  "ml_profit_thresholds": {
-    "XAUUSDm": 0.5, "BTCUSDm": 0.7, "ETHUSDm": 0.7,
-    "GBPUSDm": 0.2, "EURUSDm": 0.2, "default": 0.3 
-  },
-
-  "enable_general_auto_profit_close": false, 
-  "general_auto_close_profit_percent_entry_min": 60.0,
-  "general_auto_close_profit_percent_entry_max": 70.0,
-  "enable_general_auto_loss_close": false, 
-  "general_auto_close_max_loss_percent_entry": 55.0,
-
   "auto_close_short_tf_profit_take": {
     "enabled": true,
-    "tp_distance_ratio": 0.5, 
-    "trend_ema_short": 9, 
+    "tp_distance_ratio": 0.5,
+    "trend_ema_short": 9,
     "trend_ema_long": 21,
-    "trend_sma_period": 20 
+    "trend_sma_period": 20
   },
   "auto_close_short_tf_stop_loss": {
-    "enabled": true,
-    "sl_distance_ratio": 0.5 
+    "enabled": false,
+    "sl_distance_ratio": 0.87
   },
-
-  "allow_multiple_trades_if_profitable": true,
-  "max_open_trades_profitable": 4,
-  "min_collective_profit_for_new_trade": 0.01, 
-  "block_same_signal_if_losing": true,
-  "max_open_trades_losing_or_flat": 1
+  "profit_securing_stop_loss": {
+    "enabled": false,
+    "default": {
+      "trigger_profit_pips": 50,
+      "secure_profit_type": "fixed_pips",
+      "secure_profit_fixed_pips": 10,
+      "secure_profit_percentage": 0.5,
+      "trailing_active": true,
+      "trailing_method": "fixed_pips_behind",
+      "trailing_fixed_pips_behind": 20,
+      "trailing_atr_period": 14,
+      "trailing_atr_multiplier": 1.5,
+      "trailing_percentage_of_peak_profit": 0.7
+    },
+    "BTCUSDm": {
+      "trigger_profit_pips": 200,
+      "secure_profit_type": "percentage_of_profit",
+      "secure_profit_percentage": 100,
+      "trailing_active": true,
+      "trailing_method": "percentage_of_peak_profit",
+      "trailing_atr_period": 20,
+      "trailing_atr_multiplier": 2.5,
+      "secure_profit_fixed_pips": 100,
+      "trailing_fixed_pips_value": 90,
+      "trailing_atr_multiplier_value": 2,
+      "trailing_percentage_value": 80
+    },
+    "XAUUSDm": {
+      "trigger_profit_pips": 200,
+      "secure_profit_type": "fixed_pips",
+      "secure_profit_fixed_pips": 150,
+      "secure_profit_percentage": 0.3,
+      "trailing_active": true,
+      "trailing_method": "percentage_of_peak_profit",
+      "trailing_percentage_of_peak_profit": 0.65,
+      "trailing_fixed_pips_value": 100,
+      "trailing_atr_multiplier_value": 2,
+      "trailing_atr_period": 14,
+      "trailing_percentage_value": 90
+    },
+    "default_settings": {
+      "trigger_profit_pips": 200,
+      "secure_profit_type": "percentage_of_profit",
+      "secure_profit_fixed_pips": 150,
+      "secure_profit_percentage": 100,
+      "trailing_active": true,
+      "trailing_method": "fixed_pips_behind",
+      "trailing_fixed_pips_value": 100,
+      "trailing_atr_multiplier_value": 2,
+      "trailing_atr_period": 14,
+      "trailing_percentage_value": 70
+    }
+  },
+  "time_based_exit": {
+    "enabled": false,
+    "apply_to_timeframes": [
+      "M1",
+      "M5",
+      "M15"
+    ],
+    "default": {
+      "max_bars_open": 6,
+      "min_profit_pips_to_consider": 100,
+      "momentum_fade_adx_threshold": 22,
+      "momentum_fade_rsi_buy_exit": 48,
+      "momentum_fade_rsi_sell_exit": 50
+    },
+    "BTCUSDm_M5": {
+      "max_bars_open": 5,
+      "min_profit_pips_to_consider": 100,
+      "momentum_fade_adx_threshold": 20
+    },
+    "BTCUSDm_M15": {
+      "max_bars_open": 5,
+      "min_profit_pips_to_consider": 80
+    }
+  },
+  "trade_close_reconciliation_delay_seconds": 3,
+  "max_consecutive_losses": 2
 }

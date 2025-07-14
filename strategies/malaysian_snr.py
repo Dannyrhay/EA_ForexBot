@@ -1,175 +1,254 @@
 import pandas as pd
 import logging
 import numpy as np
-from .base_strategy import BaseStrategy
+from datetime import timedelta
 
-class MalaysianSnRStrategy(BaseStrategy):
-    def __init__(self, name, window=20, freshness_window=5, threshold=0.01):
-        super().__init__(name)
+# Set up a logger for this module
+logger = logging.getLogger(__name__)
+
+class MalaysianSnRStrategy:
+    """
+    Implements an advanced strategy based on the "Malaysian SNR Emperor" methodology.
+
+    This strategy differs from conventional SnR in several key ways:
+    1.  **Level Identification**: SnR levels are not based on wicks (swing highs/lows) but on the
+        open/close of specific candle patterns ('A' shape for resistance, 'V' shape for support).
+    2.  **Freshness**: A level is considered "fresh" until a candle's wick *touches* it.
+        This signifies liquidity has been taken. A break is not required for a level to become unfresh.
+    3.  **Confirmation Signals**: Uses an additive strength model. A signal is generated on proximity
+        to a fresh level, and its strength is boosted by confirmations like Rejection, "MISS", and Engulfing.
+    """
+    def __init__(self, name="MalaysianSnR", window=100, threshold=0.005, miss_period=5, enable_rejection=True, enable_miss=True, enable_engulfing=True):
+        """
+        Initializes the MalaysianSnRStrategy.
+        :param name: The name of the strategy.
+        :param window: The lookback period to identify SnR levels.
+        :param threshold: The proximity threshold (as a percentage) to define a level's zone.
+        :param miss_period: The number of candles that must not touch a level to qualify as a "MISS".
+        :param enable_rejection: If True, requires a price rejection confirmation.
+        :param enable_miss: If True, gives higher strength to levels validated by a "MISS".
+        :param enable_engulfing: If True, requires an engulfing pattern for the highest strength signal.
+        """
+        self.name = name
         self.window = window
-        self.freshness_window = freshness_window
-        self.freshness_threshold = threshold
+        self.threshold = threshold
+        self.miss_period = miss_period
+        self.enable_rejection = enable_rejection
+        self.enable_miss = enable_miss
+        self.enable_engulfing = enable_engulfing
 
-    def calculate_rsi(self, data, window=14):
-        """
-        Calculate the Relative Strength Index (RSI) for the given data.
-        
-        Parameters:
-        - data: DataFrame with OHLCV data
-        - window: Period for RSI calculation (default 14)
-        
-        Returns:
-        - float: RSI value, defaults to 50 if calculation fails
-        """
-        try:
-            delta = data['close'].diff()
-            gain = delta.where(delta > 0, 0)
-            loss = -delta.where(delta < 0, 0)
-            avg_gain = gain.rolling(window=window).mean()
-            avg_loss = loss.rolling(window=window).mean()
-            rs = avg_gain / avg_loss
-            rsi = 100 - (100 / (1 + rs.iloc[-1]))
-            return 50 if pd.isna(rsi) or np.isinf(rsi) else rsi
-        except Exception as e:
-            logging.warning(f"Error calculating RSI: {str(e)}")
-            return 50
+    def set_config(self, config: dict):
+        """Allows updating strategy parameters from the main bot config."""
+        self.window = config.get('snr_window', self.window)
+        self.threshold = config.get('snr_threshold', self.threshold)
+        self.miss_period = config.get('snr_miss_period', self.miss_period)
+        self.enable_rejection = config.get('snr_enable_rejection_filter', self.enable_rejection)
+        self.enable_miss = config.get('snr_enable_miss_filter', self.enable_miss)
+        self.enable_engulfing = config.get('snr_enable_engulfing_filter', self.enable_engulfing)
+        logger.debug(
+            f"MalaysianSnR config set: Window={self.window}, Threshold={self.threshold}, "
+            f"MissPeriod={self.miss_period}, RejectionFilter={self.enable_rejection}, "
+            f"MissFilter={self.enable_miss}, EngulfingFilter={self.enable_engulfing}"
+        )
 
-    def is_fresh(self, level_time, level, df, is_support):
-        """
-        Check if a support/resistance level is fresh (not mitigated by a close beyond it).
-        
-        Parameters:
-        - level_time: Timestamp of the level
-        - level: Price level to check
-        - df: DataFrame with OHLCV data and 'time' column
-        - is_support: Boolean indicating if the level is support (True) or resistance (False)
-        
-        Returns:
-        - bool: True if the level is fresh, False otherwise
-        """
-        try:
-            level_idx = df[df['time'] == pd.to_datetime(level_time)].index[0]
-            end_idx = min(level_idx + self.freshness_window, len(df) - 1)
-            recent_data = df.iloc[level_idx + 1:end_idx + 1]
-            if is_support:
-                return not any(recent_data['close'] < level)
-            else:
-                return not any(recent_data['close'] > level)
-        except Exception as e:
-            logging.error(f"Error checking level freshness for {level}: {str(e)}")
-            return False
+    def _is_bullish(self, candle):
+        return candle['close'] > candle['open']
+
+    def _is_bearish(self, candle):
+        return candle['close'] < candle['open']
 
     def identify_levels(self, data: pd.DataFrame) -> tuple[list, list]:
         """
-        Identify significant support (A) and resistance (V) levels using swing highs/lows.
+        Identifies 'A' (resistance) and 'V' (support) shaped levels based on candle body patterns,
+        as per the Malaysian SNR methodology.
 
-        Parameters:
-        - data: DataFrame with OHLCV data and 'time' column
-
-        Returns:
-        - Tuple[List[Tuple[datetime, float]], List[Tuple[datetime, float]]]: 
-          (support_levels, resistance_levels) where each level is (time, price)
+        :param data: A pandas DataFrame with market data (must include 'open', 'close', 'high', 'low').
+        :return: A tuple of two lists: (resistance_levels, support_levels).
+                 Each list contains tuples of (timestamp, price).
         """
-        try:
-            support_levels = []
-            resistance_levels = []
-            for i in range(5, len(data) - 5):
-                if (data['high'].iloc[i] > data['high'].iloc[i-1] and
-                    data['high'].iloc[i] > data['high'].iloc[i+1] and
-                    data['high'].iloc[i] > data['high'].iloc[i-2] and
-                    data['high'].iloc[i] > data['high'].iloc[i+2]):
-                    resistance_levels.append((data['time'].iloc[i], data['high'].iloc[i]))
-                elif (data['low'].iloc[i] < data['low'].iloc[i-1] and
-                      data['low'].iloc[i] < data['low'].iloc[i+1] and
-                      data['low'].iloc[i] < data['low'].iloc[i-2] and
-                      data['low'].iloc[i] < data['low'].iloc[i+2]):
-                    support_levels.append((data['time'].iloc[i], data['low'].iloc[i]))
-            return support_levels, resistance_levels
-        except Exception as e:
-            logging.error(f"Error identifying levels: {str(e)}")
-            return ([], [])
+        resistance_levels = []
+        support_levels = []
+        # Need at least 2 bars for the pattern (current + next)
+        if len(data) < 2:
+            return resistance_levels, support_levels
 
-    def get_signal(self, data: pd.DataFrame, symbol: str = None, timeframe: str = None) -> tuple[str, float]:
+        # Iterate where the 2-bar pattern can be formed
+        for i in range(len(data) - 1):
+            current_candle = data.iloc[i]
+            next_candle = data.iloc[i+1]
+
+            # Resistance 'A' Shape: Bullish candle followed by a Bearish candle.
+            # The level is the close of the bullish candle.
+            if self._is_bullish(current_candle) and self._is_bearish(next_candle):
+                level_price = current_candle['close']
+                resistance_levels.append((data.index[i], level_price))
+
+            # Support 'V' Shape: Bearish candle followed by a Bullish candle.
+            # The level is the close of the bearish candle.
+            elif self._is_bearish(current_candle) and self._is_bullish(next_candle):
+                level_price = current_candle['close']
+                support_levels.append((data.index[i], level_price))
+
+        logger.debug(f"MalaysianSnR: Identified {len(resistance_levels)} resistance and {len(support_levels)} support levels from {len(data)} bars.")
+        return resistance_levels, support_levels
+
+    def is_fresh(self, level_time, level_price, df_full_history, is_resistance):
         """
-        Generate trading signal based on proximity to fresh support/resistance levels in a trending market,
-        enhanced with RSI for overbought/oversold conditions.
+        Checks if a given SnR level is "fresh". A level becomes unfresh if a subsequent
+        candle's wick *touches* it.
 
-        Parameters:
-        - data: DataFrame with OHLCV data and 'time' column
-        - symbol: Trading symbol (optional)
-        - timeframe: Timeframe of the data (optional)
-
-        Returns:
-        - Tuple[str, float]: (signal, strength) where signal is 'buy', 'sell', or 'hold',
-                            and strength is a float between 0.0 and 1.0
+        :param level_time: The timestamp when the level was formed.
+        :param level_price: The price of the level.
+        :param df_full_history: The full market data DataFrame.
+        :param is_resistance: Boolean flag, True for resistance, False for support.
+        :return: Boolean indicating if the level is fresh.
         """
-        try:
-            support_levels, resistance_levels = self.identify_levels(data)
-            if not support_levels or not resistance_levels:
-                logging.debug(f"No support or resistance levels found for {symbol} on {timeframe}")
-                return ('hold', 0.0)
+        # Get all data that occurred *after* the level was formed.
+        data_since_level = df_full_history[df_full_history.index > level_time]
 
-            # Determine trend based on last two swing highs and lows
-            if len(support_levels) >= 2 and len(resistance_levels) >= 2:
-                last_sh = support_levels[-1][1]
-                prev_sh = support_levels[-2][1]
-                last_rh = resistance_levels[-1][1]
-                prev_rh = resistance_levels[-2][1]
-                if last_sh > prev_sh and last_rh > prev_rh:
-                    trend = 'bullish'
-                elif last_sh < prev_sh and last_rh < prev_rh:
-                    trend = 'bearish'
-                else:
-                    trend = 'neutral'
-            else:
-                trend = 'neutral'
-                logging.debug(f"Insufficient levels to determine trend for {symbol} on {timeframe}")
+        if data_since_level.empty:
+            return True  # Fresh if no bars have formed since the level
 
-            # Calculate RSI
-            rsi = self.calculate_rsi(data)
-            current_price = data['close'].iloc[-1]
-            strength = 0.5
+        if is_resistance:
+            # A resistance level is unfresh if any subsequent high is >= the level price.
+            mitigated = (data_since_level['high'] >= level_price).any()
+        else:  # is_support
+            # A support level is unfresh if any subsequent low is <= the level price.
+            mitigated = (data_since_level['low'] <= level_price).any()
 
-            fresh_supports = [lvl for lvl in support_levels if self.is_fresh(lvl[0], lvl[1], data, True)]
-            fresh_resistances = [lvl for lvl in resistance_levels if self.is_fresh(lvl[0], lvl[1], data, False)]
+        return not mitigated
 
-            if fresh_supports and fresh_resistances:
-                nearest_support = min(fresh_supports, key=lambda x: abs(x[1] - current_price))
-                nearest_resistance = min(fresh_resistances, key=lambda x: abs(x[1] - current_price))
-                dist_to_support = abs(current_price - nearest_support[1]) / current_price
-                dist_to_resistance = abs(current_price - nearest_resistance[1]) / current_price
+    def _is_rejection(self, level_price: float, candle: pd.Series, is_resistance: bool) -> bool:
+        """Checks if a candle shows rejection at a given level."""
+        if is_resistance:
+            # Wick touches/crosses, body closes below
+            return candle['high'] >= level_price and candle['close'] < level_price
+        else: # is_support
+            # Wick touches/crosses, body closes above
+            return candle['low'] <= level_price and candle['close'] > level_price
 
-                threshold = self.freshness_threshold
-                # Adjust signal with RSI
-                if trend == 'bullish' and dist_to_support < threshold and rsi < 30:
-                    signal = 'buy'
-                    strength = 0.8
-                    logging.debug(f"Buy signal for {symbol} on {timeframe}: Near support {nearest_support[1]} in bullish trend, RSI={rsi}")
-                elif trend == 'bearish' and dist_to_resistance < threshold and rsi > 70:
-                    signal = 'sell'
-                    strength = 0.8
-                    logging.debug(f"Sell signal for {symbol} on {timeframe}: Near resistance {nearest_resistance[1]} in bearish trend, RSI={rsi}")
-                elif trend == 'bullish' and dist_to_support < threshold:
-                    signal = 'buy'
-                    strength = 0.6  # Lower strength without RSI confirmation
-                    logging.debug(f"Buy signal for {symbol} on {timeframe}: Near support {nearest_support[1]} in bullish trend (RSI={rsi} not oversold)")
-                elif trend == 'bearish' and dist_to_resistance < threshold:
-                    signal = 'sell'
-                    strength = 0.6  # Lower strength without RSI confirmation
-                    logging.debug(f"Sell signal for {symbol} on {timeframe}: Near resistance {nearest_resistance[1]} in bearish trend (RSI={rsi} not overbought)")
-                else:
-                    signal = 'hold'
-                    logging.debug(f"No signal for {symbol} on {timeframe}: Trend={trend}, Dist to support={dist_to_support}, Dist to resistance={dist_to_resistance}, RSI={rsi}")
-            else:
-                signal = 'hold'
-                logging.debug(f"No fresh support or resistance levels for {symbol} on {timeframe}")
+    def _is_miss(self, level_time: pd.Timestamp, level_price: float, df_full_history: pd.DataFrame) -> bool:
+        """Checks for the 'MISS' condition, where price fails to retest a level."""
+        # Find data between level formation and the last `miss_period` candles
+        data_after_level = df_full_history[df_full_history.index > level_time]
+        if len(data_after_level) <= self.miss_period:
+            return False # Not enough candles to form a miss
 
-            return (signal, strength)
-        except Exception as e:
-            logging.error(f"Error generating signal for {symbol} on {timeframe}: {str(e)}")
-            return ('hold', 0.0)
+        # We check the candles that formed right after the level, up to the recent ones.
+        data_to_check_for_miss = data_after_level.iloc[:-self.miss_period]
+        if data_to_check_for_miss.empty:
+            return True # If no candles in the check window, it's a miss
 
-    def set_config(self, config: dict):
-        self.window = config.get('snr_window', self.window)
-        self.freshness_window = config.get('snr_freshness_window', self.freshness_window)
-        self.freshness_threshold = config.get('snr_threshold', self.freshness_threshold)
+        # A miss means price never came back to touch the level in this period
+        resistance_missed = (data_to_check_for_miss['high'] < level_price).all()
+        support_missed = (data_to_check_for_miss['low'] > level_price).all()
+
+        return resistance_missed or support_missed
+
+    def _is_engulfing(self, data: pd.DataFrame, direction: str) -> bool:
+        """
+        Checks if the last candle is a strong engulfing candle.
+        """
+        if len(data) < 2:
+            return False
+
+        last_candle = data.iloc[-1]
+        prev_candle = data.iloc[-2]
+
+        if direction == 'buy':
+            # Bullish engulfing: current bullish candle body engulfs previous bearish candle body
+            return self._is_bullish(last_candle) and \
+                   self._is_bearish(prev_candle) and \
+                   last_candle['close'] > prev_candle['open'] and \
+                   last_candle['open'] < prev_candle['close']
+        elif direction == 'sell':
+            # Bearish engulfing: current bearish candle body engulfs previous bullish candle body
+            return self._is_bearish(last_candle) and \
+                   self._is_bullish(prev_candle) and \
+                   last_candle['close'] < prev_candle['open'] and \
+                   last_candle['open'] > prev_candle['close']
+        return False
+
+    def get_signal(self, data: pd.DataFrame, symbol: str = None, timeframe: str = None, return_features=False):
+        """
+        Generates a trade signal using an additive strength model based on the Malaysian SNR methodology.
+        """
+        if not isinstance(data, pd.DataFrame) or data.empty or len(data) < self.window:
+            logger.debug(f"MalaysianSnR ({symbol} {timeframe}): Data not valid or insufficient.")
+            return ('hold', 0.0, {}) if return_features else ('hold', 0.0)
+
+        df = data.copy()
+        if 'time' in df.columns and not isinstance(df.index, pd.DatetimeIndex):
+            df['time'] = pd.to_datetime(df['time'])
+            df = df.set_index('time', drop=False)
+        elif not isinstance(df.index, pd.DatetimeIndex):
+             logger.warning(f"MalaysianSnR ({symbol} {timeframe}): Data has no DatetimeIndex. Cannot proceed.")
+             return ('hold', 0.0, {}) if return_features else ('hold', 0.0)
+
+        current_price = df['close'].iloc[-1]
+        last_candle = df.iloc[-1]
+        lookback_data = df.iloc[-self.window:-1]
+
+        resistance_levels, support_levels = self.identify_levels(lookback_data)
+
+        fresh_resistances = [lvl for lvl in resistance_levels if self.is_fresh(lvl[0], lvl[1], df, is_resistance=True)]
+        fresh_supports = [lvl for lvl in support_levels if self.is_fresh(lvl[0], lvl[1], df, is_resistance=False)]
+
+        buy_signal_strength = 0.0
+        sell_signal_strength = 0.0
+
+        # SELL Signal Logic - Additive Strength
+        if fresh_resistances:
+            nearest_res = min(fresh_resistances, key=lambda x: abs(x[1] - current_price))
+            level_price = nearest_res[1]
+
+            if abs(current_price - level_price) <= self.threshold * current_price:
+                sell_signal_strength += 0.3  # Base strength for proximity to a fresh level
+                if self.enable_rejection and self._is_rejection(level_price, last_candle, is_resistance=True):
+                    sell_signal_strength += 0.3
+                if self.enable_miss and self._is_miss(nearest_res[0], level_price, df):
+                    sell_signal_strength += 0.2
+                if self.enable_engulfing and self._is_engulfing(df, 'sell'):
+                    sell_signal_strength += 0.2
+
+        # BUY Signal Logic - Additive Strength
+        if fresh_supports:
+            nearest_sup = min(fresh_supports, key=lambda x: abs(x[1] - current_price))
+            level_price = nearest_sup[1]
+
+            if abs(current_price - level_price) <= self.threshold * current_price:
+                buy_signal_strength += 0.3 # Base strength
+                if self.enable_rejection and self._is_rejection(level_price, last_candle, is_resistance=False):
+                    buy_signal_strength += 0.3
+                if self.enable_miss and self._is_miss(nearest_sup[0], level_price, df):
+                    buy_signal_strength += 0.2
+                if self.enable_engulfing and self._is_engulfing(df, 'buy'):
+                    buy_signal_strength += 0.2
+
+        # --- Feature Calculation for ML Model (if requested) ---
+        if return_features:
+            features = {'dist_a': 0.0, 'dist_v': 0.0, 'fresh_a': 0, 'fresh_v': 0, 'strength': 0.0}
+            if fresh_resistances:
+                features['fresh_a'] = 1
+                nearest_resistance_price = min([lvl[1] for lvl in fresh_resistances], key=lambda x: abs(x - current_price))
+                features['dist_a'] = abs(current_price - nearest_resistance_price) / current_price if current_price != 0 else 0
+            if fresh_supports:
+                features['fresh_v'] = 1
+                nearest_support_price = min([lvl[1] for lvl in fresh_supports], key=lambda x: abs(x - current_price))
+                features['dist_v'] = abs(current_price - nearest_support_price) / current_price if current_price != 0 else 0
+
+            features['strength'] = max(buy_signal_strength, sell_signal_strength)
+            return 'hold', min(features['strength'], 1.0), features
+
+        # --- Final Signal Determination ---
+        if buy_signal_strength > sell_signal_strength and buy_signal_strength > 0:
+            final_strength = min(buy_signal_strength, 1.0)
+            logger.info(f"MalaysianSnR ({symbol} {timeframe}): BUY signal. Strength: {final_strength:.2f}")
+            return 'buy', final_strength
+
+        elif sell_signal_strength > buy_signal_strength and sell_signal_strength > 0:
+            final_strength = min(sell_signal_strength, 1.0)
+            logger.info(f"MalaysianSnR ({symbol} {timeframe}): SELL signal. Strength: {final_strength:.2f}")
+            return 'sell', final_strength
+
+        return 'hold', 0.0
