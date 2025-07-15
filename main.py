@@ -15,7 +15,7 @@ from sklearn.utils.validation import check_is_fitted, NotFittedError
 import inspect
 from collections import Counter # Added for label distribution logging
 from utils.feature_engineering import extract_ml_features, calculate_atr, calculate_rsi, bollinger_band_width, calculate_macd
-
+from utils.news_manager import NewsManager
 # Assuming strategies and utils are in paths accessible by Python
 from strategies.bollinger_bands import BollingerBandsStrategy
 from strategies.ml_model import MLValidator
@@ -60,7 +60,7 @@ class TradingBot:
         self.trade_management_states = {} # To store states for profit securing and trailing
         self.dxy_data_cache = {} # Cache for DXY data
         self.dxy_cache_lock = threading.Lock() # Lock for cache access
-
+        self.news_manager = NewsManager(self.config)
         # Load configuration first
         self.load_config_and_reinitialize()
 
@@ -1052,10 +1052,21 @@ class TradingBot:
             return False
 
     def execute_trade(self, symbol, signal, data, timeframe_str, trade_params=None):
+        # --- Initial Signal Check ---
         if signal == 'hold':
             logger.debug(f"EXECUTE_TRADE ({symbol} {timeframe_str}): Signal is 'hold'. No trade.")
             return False
 
+        # --- NEW: News Filter (First Check) ---
+        # This is the most important new check. If a trade is blocked by news,
+        # we exit immediately before any other calculations.
+        if self.news_manager.is_trade_prohibited(symbol):
+            # The detailed reason is already logged by the news_manager
+            logger.info(f"EXECUTE_TRADE REJECTED ({symbol} {timeframe_str} {signal}): Blocked by news filter.")
+            return False
+        # --- End of News Filter ---
+
+        # --- Pre-trade Validation Checks ---
         h1_trend_config = self.config.get('h1_trend_filter', {'enabled': True, 'allow_neutral': True})
         if h1_trend_config.get('enabled', True):
             h1_trend = self.get_trend(symbol, timeframe_str='H1')
@@ -1064,7 +1075,7 @@ class TradingBot:
                 logger.info(f"EXECUTE_TRADE REJECTED ({symbol} {timeframe_str} {signal}): H1 trend NEUTRAL and neutral trades disallowed by config.")
                 return False
             if (signal == 'buy' and h1_trend == 'downtrend') or \
-               (signal == 'sell' and h1_trend == 'uptrend'):
+            (signal == 'sell' and h1_trend == 'uptrend'):
                 logger.info(f"EXECUTE_TRADE REJECTED ({symbol} {timeframe_str} {signal}): Signal against H1 trend {h1_trend.upper()}.")
                 return False
         else:
@@ -1080,6 +1091,7 @@ class TradingBot:
             logger.info(f"EXECUTE_TRADE REJECTED ({symbol} {timeframe_str} {signal}): Max trades for symbol reached.")
             return False
 
+        # --- ML Validation ---
         symbol_info = mt5.symbol_info(symbol)
         if symbol_info is None:
             logger.error(f"EXECUTE_TRADE ({symbol} {timeframe_str}): Could not get symbol_info for {symbol}. Error: {mt5.last_error()}"); self.consecutive_failures += 1; return False
@@ -1093,7 +1105,6 @@ class TradingBot:
             dxy_data_for_exec = self.get_dxy_data_for_correlation(data.copy())
 
         try:
-            # MODIFIED: Call refactored function
             features = extract_ml_features(symbol, data.copy(), signal, self, dxy_data_for_exec)
             if features is None or any(pd.isna(f) for f in features):
                 logger.error("ML feature extraction for trade execution returned None or NaN.")
@@ -1106,24 +1117,21 @@ class TradingBot:
         if self.ml_validator.is_fitted(symbol, signal):
             try:
                 ml_prob_positive_outcome = self.ml_validator.predict_proba(symbol, [features], signal)[0][1]
-                logger.debug(f"EXECUTE_TRADE ({symbol} {timeframe_str} {signal}): ML Prediction Probability (for positive outcome): {ml_prob_positive_outcome:.4f}")
             except Exception as e:
-                logger.error(f"EXECUTE_TRADE ({symbol} {timeframe_str} {signal}): Error in ML prediction (predict_proba call): {e}", exc_info=True)
-                ml_prob_positive_outcome = 0.0 # Revert to neutral if prediction fails
+                logger.error(f"EXECUTE_TRADE ({symbol} {timeframe_str} {signal}): Error in ML prediction: {e}", exc_info=True)
+                ml_prob_positive_outcome = 0.0
         else:
-            logger.warning(f"EXECUTE_TRADE ({symbol} {timeframe_str} {signal}): ML model for {symbol} ({signal}) not fitted; using neutral confidence 0.5.")
+            logger.warning(f"EXECUTE_TRADE ({symbol} {timeframe_str} {signal}): ML model not fitted; using neutral confidence 0.5.")
 
         confidence_thresholds_config = self.config.get('ml_confidence_thresholds', {})
         direction_thresholds = confidence_thresholds_config.get(signal, {})
         ml_conf_thresh = direction_thresholds.get(symbol, direction_thresholds.get("default", 0.55))
 
-        logger.debug(f"EXECUTE_TRADE ({symbol} {timeframe_str} {signal}): Using ML Confidence Threshold: {ml_conf_thresh:.4f}")
-
         if ml_prob_positive_outcome < ml_conf_thresh:
-            logger.info(f"EXECUTE_TRADE REJECTED ({symbol} {timeframe_str} {signal}): ML confidence {ml_prob_positive_outcome:.4f} < threshold {ml_conf_thresh:.4f}")
+            logger.info(f"EXECUTE_TRADE REJECTED ({symbol} {timeframe_str} {signal}): ML confidence {ml_prob_positive_outcome:.2f} < threshold {ml_conf_thresh:.2f}")
             return False
-        logger.info(f"EXECUTE_TRADE ({symbol} {timeframe_str} {signal}): ML confidence {ml_prob_positive_outcome:.4f} >= threshold {ml_conf_thresh:.4f}. Proceeding.")
-
+        logger.info(f"EXECUTE_TRADE ({symbol} {timeframe_str} {signal}): ML confidence {ml_prob_positive_outcome:.2f} >= threshold {ml_conf_thresh:.2f}. Proceeding.")
+        
         price_entry = tick.ask if signal == 'buy' else tick.bid
         if price_entry == 0 :
             logger.error(f"EXECUTE_TRADE ({symbol} {timeframe_str} {signal}): Entry price (bid/ask) is zero. Cannot place trade."); return False

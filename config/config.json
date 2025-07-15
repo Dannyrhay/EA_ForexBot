@@ -1,4 +1,12 @@
 {
+  "news_filter": {
+    "enabled": true,
+    "cache_ttl_hours": 4,
+    "prohibited_impacts": ["High"],
+    "minutes_before_news": 30,
+    "minutes_after_news": 30
+  },
+  
   "symbols": [
     "XAUUSDm"
   ],
