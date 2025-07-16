@@ -1,5 +1,3 @@
-# utils/news_manager.py
-
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 import logging
@@ -42,8 +40,9 @@ class NewsManager:
 
     def is_trade_prohibited(self, symbol: str):
         """
-        Checks if a trade for the given symbol should be blocked due to an upcoming
-        or recent high-impact news event.
+        Checks if a trade should be blocked.
+        1. First, checks for global-blocking news (e.g., USD).
+        2. If none, checks for news specific to the symbol's currency pair.
         """
         if not self.is_enabled():
             return False
@@ -58,29 +57,44 @@ class NewsManager:
         prohibited_impacts = self.config.get('prohibited_impacts', ['High'])
         minutes_before = self.config.get('minutes_before_news', 30)
         minutes_after = self.config.get('minutes_after_news', 30)
+        now_utc = datetime.now(timezone.utc)
 
-        # Extract base and quote currencies from the symbol
-        # This is a simple assumption and may need to be more robust for complex symbols
+        # --- NEW: Global Currency Check ---
+        global_block_currencies = self.config.get('block_all_on_currency', [])
+        if global_block_currencies:
+            global_news = self.news_cache[
+                (self.news_cache['currency'].isin(global_block_currencies)) &
+                (self.news_cache['impact'].isin(prohibited_impacts))
+            ]
+            for _, event in global_news.iterrows():
+                event_time = event['datetime_utc']
+                blackout_start = event_time - timedelta(minutes=minutes_before)
+                blackout_end = event_time + timedelta(minutes=minutes_after)
+                if blackout_start <= now_utc <= blackout_end:
+                    logger.warning(
+                        f"TRADE BLOCKED (GLOBAL): All trading paused due to high-impact '{event['event']}' "
+                        f"for {event['currency']} at {event_time.strftime('%H:%M')} UTC."
+                    )
+                    return True
+        # --- End of Global Check ---
+
+        # --- Original Pair-Specific Check ---
         currencies_in_pair = []
         if len(symbol) >= 6:
             currencies_in_pair.append(symbol[:3].upper())
             currencies_in_pair.append(symbol[3:6].upper())
         else:
-            logger.warning(f"Could not determine currency pair from symbol '{symbol}'. News filter may be ineffective.")
-            return False
+            return False # Cannot check news if symbol format is unknown
 
-        now_utc = datetime.now(timezone.utc)
-
-        # Filter for relevant news events
-        relevant_news = self.news_cache[
+        pair_specific_news = self.news_cache[
             (self.news_cache['currency'].isin(currencies_in_pair)) &
             (self.news_cache['impact'].isin(prohibited_impacts))
         ]
 
-        if relevant_news.empty:
+        if pair_specific_news.empty:
             return False
 
-        for _, event in relevant_news.iterrows():
+        for _, event in pair_specific_news.iterrows():
             event_time = event['datetime_utc']
             blackout_start = event_time - timedelta(minutes=minutes_before)
             blackout_end = event_time + timedelta(minutes=minutes_after)

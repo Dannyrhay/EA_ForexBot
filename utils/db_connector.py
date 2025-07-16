@@ -22,7 +22,7 @@ class MongoDBConnection:
     _db = None
 
     # Defaults from your provided connection string
-    DEFAULT_MONGO_URI = "mongodb+srv://EA_TradingBot:pykOSLpNP9k1jMre@cluster0.0mk8h.mongodb.net/"
+    DEFAULT_MONGO_URI = ""
     DEFAULT_DB_NAME = "EA_TradingBot"
 
     @classmethod

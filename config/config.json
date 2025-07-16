@@ -4,9 +4,10 @@
     "cache_ttl_hours": 4,
     "prohibited_impacts": ["High"],
     "minutes_before_news": 30,
-    "minutes_after_news": 30
+    "minutes_after_news": 30,
+    "block_all_on_currency": ["USD"]
   },
-  
+
   "symbols": [
     "XAUUSDm"
   ],
