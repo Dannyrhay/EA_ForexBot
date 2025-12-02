@@ -339,8 +339,8 @@ def force_full_ml_training_api():
 @app.route('/api/backtest/strategies', methods=['GET'])
 def get_backtest_strategies_api():
     try:
-        # --- MODIFIED LINE ---
-        supported_strategies = [ "Scalping", "SMA", "BollingerBands", "LiquiditySweep","ADX", "KeltnerChannels","Fibonacci", "MalaysianSnR", "SMC" ]
+        # Only include strategies that actually exist
+        supported_strategies = ["LiquiditySweep", "ADX", "Fibonacci", "MalaysianSnR", "SMC"]
         return jsonify({"strategies": supported_strategies})
     except Exception as e:
         return jsonify({"error": f"Could not load strategies: {str(e)}"}), 500

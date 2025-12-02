@@ -259,3 +259,129 @@ def extract_ml_features(
         final_features.append(0.0)
 
     return final_features[:default_feature_vector_length]
+
+def extract_ml_features_batch(symbol, data, signal_direction, bot_instance, dxy_data=None):
+    """
+    Batch extraction of features for training.
+    Returns DataFrame with feature columns.
+    """
+    if data is None or data.empty:
+        return pd.DataFrame()
+
+    df = data.copy()
+    if 'time' in df.columns:
+        df['time'] = pd.to_datetime(df['time'])
+
+    # --- 1. Base Indicators ---
+    # ATR
+    high_low = df['high'] - df['low']
+    high_close = abs(df['high'] - df['close'].shift()).fillna(0.0)
+    low_close = abs(df['low'] - df['close'].shift()).fillna(0.0)
+    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    atr = tr.ewm(com=13, min_periods=14).mean().fillna(0.0)
+
+    # RSI
+    delta = df['close'].diff()
+    gain = delta.where(delta > 0, 0.0).fillna(0.0)
+    loss = -delta.where(delta < 0, 0.0).fillna(0.0)
+    avg_gain = gain.ewm(com=13, min_periods=14).mean()
+    avg_loss = loss.ewm(com=13, min_periods=14).mean()
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    rsi = rsi.fillna(50.0)
+
+    # MACD
+    ema_fast = df['close'].ewm(span=12, adjust=False).mean()
+    ema_slow = df['close'].ewm(span=26, adjust=False).mean()
+    macd_line = ema_fast - ema_slow
+    signal_line = macd_line.ewm(span=9, adjust=False).mean()
+    hist = macd_line - signal_line
+    macd_adj = (macd_line / atr).replace([np.inf, -np.inf], 0.0).fillna(0.0)
+    hist_adj = (hist / atr).replace([np.inf, -np.inf], 0.0).fillna(0.0)
+
+    # BB Width
+    ma = df['close'].rolling(window=20).mean()
+    std = df['close'].rolling(window=20).std()
+    upper = ma + 2 * std
+    lower = ma - 2 * std
+    bb_width = ((upper - lower) / ma).replace([np.inf, -np.inf], 0.0).fillna(0.0)
+
+    # --- 2. Strategy Indicators ---
+    # ADX
+    adx_val = pd.Series(0.0, index=df.index)
+    di_diff = pd.Series(0.0, index=df.index)
+    adx_strategy = bot_instance._adx_strategy_for_features
+    if adx_strategy:
+        adx_ind = adx_strategy.get_indicator_values(df)
+        if adx_ind is not None:
+            adx_val = adx_ind['adx'].fillna(0.0)
+            di_diff = (adx_ind['plus_di'] - adx_ind['minus_di']).fillna(0.0)
+
+    # Keltner
+    kc_upper_dist = pd.Series(0.0, index=df.index)
+    kc_lower_dist = pd.Series(0.0, index=df.index)
+    kc_width = pd.Series(0.0, index=df.index)
+    keltner_strategy = bot_instance._keltner_strategy_for_features
+    if keltner_strategy:
+        kc_ind = keltner_strategy.get_indicator_values(df)
+        if kc_ind is not None:
+            kc_upper = kc_ind['upper_band']
+            kc_lower = kc_ind['lower_band']
+            kc_middle = kc_ind['middle_band']
+            kc_upper_dist = ((df['close'] - kc_upper) / kc_upper).replace([np.inf, -np.inf], 0.0).fillna(0.0)
+            kc_lower_dist = ((df['close'] - kc_lower) / kc_lower).replace([np.inf, -np.inf], 0.0).fillna(0.0)
+            kc_width = ((kc_upper - kc_lower) / kc_middle).replace([np.inf, -np.inf], 0.0).fillna(0.0)
+
+    # --- 3. Other Features ---
+    # ROC
+    roc_rsi_5 = (rsi - rsi.shift(5)) / 5
+    roc_rsi_10 = (rsi - rsi.shift(10)) / 10
+    roc_adx_5 = (adx_val - adx_val.shift(5)) / 5
+    roc_adx_10 = (adx_val - adx_val.shift(10)) / 10
+
+    # Volatility Range (Expanding)
+    vol_range = (df['high'].expanding().max() - df['low'].expanding().min()) / df['close']
+    vol_range = vol_range.replace([np.inf, -np.inf], 0.0).fillna(0.0)
+
+    # Time
+    hour = df['time'].dt.hour
+    day = df['time'].dt.dayofweek
+
+    # SnR (Placeholder - 0s for batch)
+    zeros = pd.Series(0.0, index=df.index)
+
+    # DXY (Placeholder - 0s for batch)
+    dxy_feat = zeros
+
+    # Sessions (Placeholder - 0s)
+    is_asian = zeros
+    is_london = zeros
+    is_ny = zeros
+
+    # --- Assemble DataFrame ---
+    features_df = pd.DataFrame({
+        'f0': df['close'].pct_change().expanding().mean().fillna(0.0),
+        'f1': 1.0 if signal_direction == 'buy' else 0.0,
+        'f2': df['tick_volume'].expanding().mean().fillna(0.0),
+        'f3': rsi,
+        'f4': atr,
+        'f5': bb_width,
+        'f6': macd_adj,
+        'f7': hist_adj,
+        'f8': zeros, 'f9': zeros, 'f10': zeros, 'f11': zeros, 'f12': zeros, # SnR
+        'f13': vol_range,
+        'f14': adx_val,
+        'f15': di_diff,
+        'f16': kc_upper_dist, 'f17': kc_lower_dist, 'f18': kc_width,
+        'f19': roc_rsi_5.fillna(0.0), 'f20': roc_rsi_10.fillna(0.0),
+        'f21': roc_adx_5.fillna(0.0), 'f22': roc_adx_10.fillna(0.0),
+        'f23': hour, 'f24': day,
+        'f25': dxy_feat,
+        'f26': is_asian, 'f27': is_london, 'f28': is_ny
+    })
+
+    # Ensure 34 columns (pad if needed)
+    for i in range(29, 34):
+        features_df[f'f{i}'] = 0.0
+
+    return features_df

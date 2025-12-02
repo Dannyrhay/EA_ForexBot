@@ -1,9 +1,9 @@
 {
   "symbols": [
-    "BTCUSDm",
     "XAUUSDm"
   ],
   "timeframes": [
+    "M1",
     "M5"
   ],
   "active_strategies": [
@@ -19,64 +19,33 @@
     "server": "YOUR_MT5_SERVER_HERE",
     "mt5_terminal_path": null
   },
-  "bars": 100,
-  "monitoring_interval_seconds": 1,
+  "bars": 1000,
+  "monitoring_interval_seconds": 60,
   "error_sleep_interval_seconds": 300,
-  "cooldown_period_minutes": 0,
+  "cooldown_period_minutes": 15,
   "max_trades_per_symbol": 5,
-  "max_consecutive_trade_failures": 3,
-  "global_retrain_hours": 18,
-  "initial_training_bars": 1500,
-  "retrain_data_bars": 1000,
+  "max_consecutive_trade_failures": 10,
+  "global_retrain_hours": 12,
+  "initial_training_bars": 5000,
+  "retrain_data_bars": 1500,
   "dxy_symbol": "DXYm",
   "ml_model_type": "XGBoost",
-  "ml_primary_training_timeframe": "H1",
+  "ml_primary_training_timeframe": "D1",
   "ml_training_window": 120,
   "ml_prediction_horizon": 20,
   "ml_target_definition": {
     "method": "price_change",
     "params": {
-      "atr_period": 10,
+      "atr_period": 14,
       "atr_multiplier": 1.0,
-      "change_threshold_percent": 0.5,
-      "prediction_horizon_for_change": 10
+      "change_threshold_percent": 0.4,
+      "prediction_horizon_for_change": 20
     }
   },
   "ml_confidence_thresholds": {
     "buy": {
       "default": 0.25,
       "XAUUSDm": 0.2
-    },
-    "sell": {
-      "default": 0.25,
-      "XAUUSDm": 0.2
-    }
-  },
-  "risk_management": {
-    "enabled": true,
-    "method": "atr",
-    "atr_params": {
-      "sl_multiplier": 1.7,
-      "tp_risk_reward_ratio": 3,
-      "atr_period": 10
-    },
-    "percentage_params": {
-      "sl_percent": 1.0,
-      "tp_percent": 2
-    },
-    "fixed_pips_params": {
-      "sl_pips": 30,
-      "tp_pips": 75
-    },
-    "max_risk_percent_per_trade": 2.0
-  },
-  "ml_prediction_strategy_params": {
-    "enabled": true
-  },
-  "random_forest_params": {
-    "n_estimators": [
-      50,
-      100
     ],
     "max_depth": [
       10,
@@ -129,14 +98,14 @@
     "time_based_features": true,
     "dxy_correlation_for_xauusd": true
   },
-  "risk_percent_per_trade": 0.02,
+  "risk_percent_per_trade": 0.005,
   "risk_params": {
     "BTCUSDm": {
-      "max_risk_per_trade": 0.03,
+      "max_risk_per_trade": 0.0075,
       "volatility_adjustment": 1.8
     },
     "XAUUSDm": {
-      "max_risk_per_trade": 0.02,
+      "max_risk_per_trade": 0.005,
       "volatility_adjustment": 1.2
     }
   },
@@ -154,51 +123,51 @@
     "allow_neutral": false
   },
   "fibonacci_golden_zone": {
-    "swing_lookback": 50,
-    "trend_ema_period": 50,
-    "signal_strength": 0.3
+    "swing_lookback": 200,
+    "trend_ema_period": 200,
+    "signal_strength": 0.7
   },
-  "smc_higher_timeframe": "M15",
-  "smc_swing_lookback": 25,
+  "smc_higher_timeframe": "H1",
+  "smc_swing_lookback": 50,
   "smc_fvg_threshold": 0.0003,
   "smc_liquidity_tolerance": 0.0005,
-  "smc_poi_search_range": 5,
+  "smc_poi_search_range": 10,
   "smc_trade_cooldown": 0,
   "liquidity_sweep_params": {
-    "lookback_period": 15,
+    "lookback_period": 30,
     "eq_level_tolerance": 0.0005,
-    "ob_retrace_pct": 0.4,
-    "volume_multiplier": 1,
+    "ob_retrace_pct": 0.5,
+    "volume_multiplier": 1.2,
     "enable_fvg": true,
     "enable_mss_confirmation": false
   },
-  "snr_window": 50,
-  "snr_threshold": 0.03,
+  "snr_window": 100,
+  "snr_threshold": 0.005,
   "snr_miss_period": 5,
   "snr_enable_rejection_filter": false,
   "snr_enable_miss_filter": false,
   "snr_enable_engulfing_filter": false,
   "adx_period": 14,
-  "adx_di_period": 19,
+  "adx_di_period": 14,
   "adx_threshold": 20,
   "adx_strength_factor": 0.02,
   "adx_signal_filter": {
     "enabled": false,
     "min_adx_for_entry": 10,
-    "min_adx_for_entry_BTCUSDm": 21,
+    "min_adx_for_entry_BTCUSDm": 10,
     "require_di_confirmation": false,
     "filter_mode": "all_others",
     "strategies_to_filter": []
   },
   "consensus_threshold": {
     "default": {
-      "low_vol": 0.35,
-      "high_vol": 0.38,
+      "low_vol": 0.2,
+      "high_vol": 0.25,
       "vol_split": 0.005
     },
     "BTCUSDm": {
-      "low_vol": 0.3,
-      "high_vol": 0.3,
+      "low_vol": 0.4,
+      "high_vol": 0.6,
       "vol_split": 0.01
     }
   },
@@ -320,12 +289,12 @@
       "trigger_profit_pips": 200,
       "secure_profit_type": "percentage_of_profit",
       "secure_profit_fixed_pips": 150,
-      "secure_profit_percentage": 85,
+      "secure_profit_percentage": 100,
       "trailing_active": true,
-      "trailing_method": "atr_multiplier",
+      "trailing_method": "fixed_pips_behind",
       "trailing_fixed_pips_value": 100,
-      "trailing_atr_multiplier_value": 4,
-      "trailing_atr_period": 15,
+      "trailing_atr_multiplier_value": 2,
+      "trailing_atr_period": 14,
       "trailing_percentage_value": 70
     }
   },
@@ -354,6 +323,6 @@
     }
   },
   "trade_close_reconciliation_delay_seconds": 3,
-  "max_consecutive_losses": 10,
+  "max_consecutive_losses": 3,
   "strategy_weighting_lookback_days": 30
 }

@@ -1,0 +1,12 @@
+MetaTrader5
+pandas
+numpy
+pymongo
+python-dotenv
+certifi
+requests
+textblob
+scikit-learn
+xgboost
+backtesting
+pytz

@@ -57,39 +57,64 @@ class MalaysianSnRStrategy:
     def _is_bearish(self, candle):
         return candle['close'] < candle['open']
 
+    def _calculate_atr(self, data, period=14):
+        """Calculates the Average True Range (ATR)."""
+        high = data['high']
+        low = data['low']
+        close = data['close']
+
+        tr1 = high - low
+        tr2 = (high - close.shift()).abs()
+        tr3 = (low - close.shift()).abs()
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        atr = tr.rolling(window=period).mean()
+        return atr
+
     def identify_levels(self, data: pd.DataFrame) -> tuple[list, list]:
         """
-        Identifies 'A' (resistance) and 'V' (support) shaped levels based on candle body patterns,
-        as per the Malaysian SNR methodology.
-
-        :param data: A pandas DataFrame with market data (must include 'open', 'close', 'high', 'low').
-        :return: A tuple of two lists: (resistance_levels, support_levels).
-                 Each list contains tuples of (timestamp, price).
+        Identifies 'A' (resistance) and 'V' (support) shaped levels based on candle body patterns.
+        Includes Significance Filter: Price must move away by > 2 * ATR.
         """
         resistance_levels = []
         support_levels = []
         # Need at least 2 bars for the pattern (current + next)
-        if len(data) < 2:
+        if len(data) < 20: # Need enough data for ATR and lookahead
             return resistance_levels, support_levels
 
+        atr_series = self._calculate_atr(data)
+
         # Iterate where the 2-bar pattern can be formed
-        for i in range(len(data) - 1):
+        # We stop earlier to allow for lookahead check
+        lookahead = 10
+        for i in range(len(data) - 1 - lookahead):
             current_candle = data.iloc[i]
             next_candle = data.iloc[i+1]
+            current_atr = atr_series.iloc[i]
+            if np.isnan(current_atr) or current_atr == 0: continue
+
+            min_move = 0.5 * current_atr # RELAXED for Verification (was 2.0 * ATR)
 
             # Resistance 'A' Shape: Bullish candle followed by a Bearish candle.
-            # The level is the close of the bullish candle.
             if self._is_bullish(current_candle) and self._is_bearish(next_candle):
                 level_price = current_candle['close']
-                resistance_levels.append((data.index[i], level_price))
+                # Check for significant move away (Down)
+                future_lows = data['low'].iloc[i+1 : i+1+lookahead]
+                max_drop = level_price - future_lows.min()
+
+                if max_drop > min_move:
+                    resistance_levels.append((data.index[i], level_price))
 
             # Support 'V' Shape: Bearish candle followed by a Bullish candle.
-            # The level is the close of the bearish candle.
             elif self._is_bearish(current_candle) and self._is_bullish(next_candle):
                 level_price = current_candle['close']
-                support_levels.append((data.index[i], level_price))
+                # Check for significant move away (Up)
+                future_highs = data['high'].iloc[i+1 : i+1+lookahead]
+                max_rise = future_highs.max() - level_price
 
-        logger.debug(f"MalaysianSnR: Identified {len(resistance_levels)} resistance and {len(support_levels)} support levels from {len(data)} bars.")
+                if max_rise > min_move:
+                    support_levels.append((data.index[i], level_price))
+
+        # logger.debug(f"MalaysianSnR: Identified {len(resistance_levels)} resistance and {len(support_levels)} support levels from {len(data)} bars.")
         return resistance_levels, support_levels
 
     def is_fresh(self, level_time, level_price, df_full_history, is_resistance):
@@ -241,14 +266,33 @@ class MalaysianSnRStrategy:
             return 'hold', min(features['strength'], 1.0), features
 
         # --- Final Signal Determination ---
+        # --- Final Signal Determination ---
+        atr = self._calculate_atr(df).iloc[-1]
+
         if buy_signal_strength > sell_signal_strength and buy_signal_strength > 0:
             final_strength = min(buy_signal_strength, 1.0)
-            logger.info(f"MalaysianSnR ({symbol} {timeframe}): BUY signal. Strength: {final_strength:.2f}")
-            return 'buy', final_strength
+
+            # Calculate SL/TP
+            # SL below the support level
+            nearest_sup = min(fresh_supports, key=lambda x: abs(x[1] - current_price))
+            level_price = nearest_sup[1]
+            sl_price = level_price - (atr * 1.5)
+            tp_price = current_price + (current_price - sl_price) * 2.0
+
+            logger.info(f"MalaysianSnR ({symbol} {timeframe}): BUY signal. Strength: {final_strength:.2f}, SL: {sl_price:.5f}, TP: {tp_price:.5f}")
+            return 'buy', final_strength, {'sl': sl_price, 'tp': tp_price}
 
         elif sell_signal_strength > buy_signal_strength and sell_signal_strength > 0:
             final_strength = min(sell_signal_strength, 1.0)
-            logger.info(f"MalaysianSnR ({symbol} {timeframe}): SELL signal. Strength: {final_strength:.2f}")
-            return 'sell', final_strength
 
-        return 'hold', 0.0
+            # Calculate SL/TP
+            # SL above the resistance level
+            nearest_res = min(fresh_resistances, key=lambda x: abs(x[1] - current_price))
+            level_price = nearest_res[1]
+            sl_price = level_price + (atr * 1.5)
+            tp_price = current_price - (sl_price - current_price) * 2.0
+
+            logger.info(f"MalaysianSnR ({symbol} {timeframe}): SELL signal. Strength: {final_strength:.2f}, SL: {sl_price:.5f}, TP: {tp_price:.5f}")
+            return 'sell', final_strength, {'sl': sl_price, 'tp': tp_price}
+
+        return 'hold', 0.0, {}
