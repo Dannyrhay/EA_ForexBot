@@ -99,10 +99,15 @@ class FibonacciStrategy(BaseStrategy):
                     sl_price = swing_low_price
                     # Target -0.27 extension for better R:R
                     tp_price = swing_high_price + (fib_range * 0.27)
+<<<<<<< HEAD
                     # [NEW] Use Limit Order at the test level (38.2%) for better entry
                     limit_price = test_level
                     trade_params = {'sl': sl_price, 'tp': tp_price, 'limit_price': limit_price, 'source_strategy': 'Fibonacci'}
                     logger.info(f"Fibonacci BUY for {symbol} on {timeframe}: Rejection confirmed at {test_level:.5f}. Limit: {limit_price:.5f} SL: {sl_price:.5f} TP: {tp_price:.5f}")
+=======
+                    trade_params = {'sl': sl_price, 'tp': tp_price, 'source_strategy': 'Fibonacci'}
+                    logger.info(f"Fibonacci BUY for {symbol} on {timeframe}: Rejection confirmed at {test_level:.5f}. SL: {sl_price:.5f} TP: {tp_price:.5f}")
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
                     return ('buy', self.strength, trade_params)
                 else:
                     logger.debug(f"Fibonacci BUY failed for {symbol}: Entered={price_entered_zone}, Tested382={level_tested}, ClosedAbove={closed_above_level}, Zone=[{test_level:.5f}-{zone_start:.5f}], PrevLow={prev_candle['low']:.5f}, PrevClose={prev_candle['close']:.5f}")
@@ -135,10 +140,15 @@ class FibonacciStrategy(BaseStrategy):
                     sl_price = swing_high_price
                     # Target -0.27 extension for better R:R
                     tp_price = swing_low_price - (fib_range * 0.27)
+<<<<<<< HEAD
                     # [NEW] Use Limit Order at the test level (38.2%) for better entry
                     limit_price = test_level
                     trade_params = {'sl': sl_price, 'tp': tp_price, 'limit_price': limit_price, 'source_strategy': 'Fibonacci'}
                     logger.info(f"Fibonacci SELL for {symbol} on {timeframe}: Rejection confirmed at {test_level:.5f}. Limit: {limit_price:.5f} SL: {sl_price:.5f} TP: {tp_price:.5f}")
+=======
+                    trade_params = {'sl': sl_price, 'tp': tp_price, 'source_strategy': 'Fibonacci'}
+                    logger.info(f"Fibonacci SELL for {symbol} on {timeframe}: Rejection confirmed at {test_level:.5f}. SL: {sl_price:.5f} TP: {tp_price:.5f}")
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
                     return ('sell', self.strength, trade_params)
                 else:
                     logger.debug(f"Fibonacci SELL failed for {symbol}: Entered={price_entered_zone}, Tested382={level_tested}, ClosedBelow={closed_below_level}, Zone=[{zone_start:.5f}-{test_level:.5f}], PrevHigh={prev_candle['high']:.5f}, PrevClose={prev_candle['close']:.5f}")

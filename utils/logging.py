@@ -20,19 +20,27 @@ def setup_logging():
     # Set root logger to INFO to reduce verbosity
     logger.setLevel(logging.DEBUG)
 
+<<<<<<< HEAD
     # Reduce noise from external libraries
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     logging.getLogger('matplotlib').setLevel(logging.WARNING)
     logging.getLogger('werkzeug').setLevel(logging.WARNING)
     logging.getLogger('pymongo').setLevel(logging.WARNING)
 
+=======
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
     formatter = UTCTimeFormatter(
         fmt='%(asctime)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S %Z'
     )
 
+<<<<<<< HEAD
     # File Handler with Rotation
     file_handler = RotatingFileHandler('logs/trading_ea.log', maxBytes=5*1024*1024, backupCount=5, encoding='utf-8')
+=======
+    # File Handler
+    file_handler = logging.FileHandler('logs/trading_ea.log', encoding='utf-8')
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
 
@@ -41,4 +49,12 @@ def setup_logging():
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
+<<<<<<< HEAD
+=======
+    # Reduce noise from external libraries
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
+    logging.getLogger('matplotlib').setLevel(logging.WARNING)
+    logging.getLogger('werkzeug').setLevel(logging.WARNING)
+
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
     return logger

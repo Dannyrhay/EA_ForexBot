@@ -64,10 +64,13 @@ class TradingBot:
         # Throttle session check logging (log once per minute)
         self._last_session_log_time = {}
 
+<<<<<<< HEAD
         # [NEW] Portfolio Risk State
         self.daily_starting_equity = 0.0
         self.last_day_reset = datetime.now(timezone.utc).date()
 
+=======
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
         # Load configuration first
         self.load_config_and_reinitialize()
 
@@ -126,8 +129,12 @@ class TradingBot:
             self.consensus_engine = ConsensusEngine(
                 strategies=self.strategies,
                 config=self.config,
+<<<<<<< HEAD
                 ml_validator=self.ml_validator,
                 bot_instance=self
+=======
+                ml_validator=self.ml_validator
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
             )
             logger.info("ConsensusEngine initialized successfully.")
 
@@ -749,6 +756,7 @@ class TradingBot:
                 return True
         return False
 
+<<<<<<< HEAD
     def can_open_new_trade(self, symbol, strategy_name=None):
         if self.in_cooldown(symbol): return False
 
@@ -802,6 +810,29 @@ class TradingBot:
                     account_info = mt5.account_info()
                     balance = account_info.balance if account_info else 1000.0
 
+=======
+    def can_open_new_trade(self, symbol):
+        if self.in_cooldown(symbol): return False
+
+        positions = mt5.positions_get(symbol=symbol)
+        if positions and len(positions) >= self.config.get('max_open_positions_per_symbol', 1):
+            return False
+
+        return True
+
+    def execute_trade(self, symbol, signal_type, trade_params, data, timeframe):
+        if not self.can_open_new_trade(symbol):
+            logger.info(f"Skipping trade for {symbol}: Cooldown or max positions reached.")
+            return
+
+        volume = trade_params.get('volume')
+        if volume is None:
+            if self.risk_manager:
+                try:
+                    account_info = mt5.account_info()
+                    balance = account_info.balance if account_info else 1000.0
+
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
                     entry_price = trade_params.get('entry_price')
                     sl_price = trade_params.get('sl_price')
 
@@ -828,17 +859,29 @@ class TradingBot:
 
         sl = trade_params.get('sl_price')
         tp = trade_params.get('tp_price')
+<<<<<<< HEAD
         # Comment format: AI-{StrategyName}-{Timeframe}
         comment = f"AI-{strategy_name}-{timeframe}"
+=======
+        comment = f"AI-{timeframe}"
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
 
         limit_price = trade_params.get('limit_price')
 
         if limit_price:
+<<<<<<< HEAD
             return self._place_limit_order(symbol, signal_type, volume, limit_price, sl, tp, comment, strategies=[strategy_name])
         else:
             return self._send_market_order(symbol, signal_type, volume, sl, tp, comment, strategies=[strategy_name])
 
     def _send_market_order(self, symbol, signal_type, volume, sl, tp, comment, strategies=None):
+=======
+            self._place_limit_order(symbol, signal_type, volume, limit_price, sl, tp, comment)
+        else:
+            self._send_market_order(symbol, signal_type, volume, sl, tp, comment)
+
+    def _send_market_order(self, symbol, signal_type, volume, sl, tp, comment):
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
         order_type = mt5.ORDER_TYPE_BUY if signal_type == 'buy' else mt5.ORDER_TYPE_SELL
         price = mt5.symbol_info_tick(symbol).ask if signal_type == 'buy' else mt5.symbol_info_tick(symbol).bid
 
@@ -860,6 +903,7 @@ class TradingBot:
         result = mt5.order_send(request)
         if result and result.retcode == mt5.TRADE_RETCODE_DONE:
             logger.info(f"Trade executed: {symbol} {signal_type} {volume} lots at {price}")
+<<<<<<< HEAD
             self.save_new_trade(result, symbol, signal_type, volume, sl, tp, comment, strategies=strategies)
             self.last_trade_times[symbol] = datetime.now(timezone.utc)
             return result.order
@@ -868,6 +912,14 @@ class TradingBot:
             return None
 
     def _place_limit_order(self, symbol, signal_type, volume, price, sl, tp, comment, strategies=None):
+=======
+            self.save_new_trade(result, symbol, signal_type, volume, sl, tp, comment)
+            self.last_trade_times[symbol] = datetime.now(timezone.utc)
+        else:
+            logger.error(f"Trade failed: {result.comment if result else mt5.last_error()}")
+
+    def _place_limit_order(self, symbol, signal_type, volume, price, sl, tp, comment):
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
         order_type = mt5.ORDER_TYPE_BUY_LIMIT if signal_type == 'buy' else mt5.ORDER_TYPE_SELL_LIMIT
 
         request = {
@@ -888,11 +940,17 @@ class TradingBot:
         result = mt5.order_send(request)
         if result and result.retcode == mt5.TRADE_RETCODE_DONE:
             logger.info(f"Limit order placed: {symbol} {signal_type} {volume} lots at {price}")
+<<<<<<< HEAD
             self.save_new_trade(result, symbol, signal_type, volume, sl, tp, comment, strategies=strategies)
             return result.order
         else:
             logger.error(f"Limit order failed: {result.comment if result else mt5.last_error()}")
             return None
+=======
+            self.save_new_trade(result, symbol, signal_type, volume, sl, tp, comment)
+        else:
+            logger.error(f"Limit order failed: {result.comment if result else mt5.last_error()}")
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
 
     def close_position_by_ticket(self, ticket, symbol, volume, order_type, comment=""):
         close_type = mt5.ORDER_TYPE_SELL if order_type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
@@ -920,7 +978,11 @@ class TradingBot:
             logger.error(f"Failed to close position {ticket}: {result.comment if result else mt5.last_error()}")
             return False
 
+<<<<<<< HEAD
     def save_new_trade(self, result, symbol, signal_type, volume, sl, tp, comment, strategies=None):
+=======
+    def save_new_trade(self, result, symbol, signal_type, volume, sl, tp, comment):
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
         trade_data = {
             "order_id": result.order,
             "deal_id": result.deal,
@@ -932,8 +994,12 @@ class TradingBot:
             "tp": tp,
             "entry_time": datetime.now(timezone.utc),
             "status": "open",
+<<<<<<< HEAD
             "comment": comment,
             "strategies": strategies if strategies else []
+=======
+            "comment": comment
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
         }
         save_trade(trade_data)
 
@@ -950,6 +1016,7 @@ class TradingBot:
 
                 self.manage_open_trades()
                 self.check_closed_trades()
+<<<<<<< HEAD
 
                 # [NEW] Daily Equity Reset Logic
                 current_date = datetime.now(timezone.utc).date()
@@ -966,6 +1033,8 @@ class TradingBot:
                     if acc_info:
                         self.daily_starting_equity = acc_info.equity
                         logger.info(f"Initialized daily starting equity to: {self.daily_starting_equity}")
+=======
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
 
                 if datetime.now(timezone.utc) - self.last_global_retrain_time > self.global_retrain_interval:
                     self.perform_global_retrain()
@@ -982,6 +1051,7 @@ class TradingBot:
                             logger.error("ConsensusEngine not initialized! Skipping analysis.")
                             continue
 
+<<<<<<< HEAD
                         # Analyze using ConsensusEngine (get individual valid signals)
                         # Pass data (DataFrame) as first argument
                         valid_signals = self.consensus_engine.get_valid_signals(data, symbol, tf_str)
@@ -1018,6 +1088,27 @@ class TradingBot:
                                     # Keep only last 50 signals
                                     if len(self.recent_signals) > 50:
                                         self.recent_signals.pop(0)
+=======
+                        # Analyze using ConsensusEngine (it collects signals internally)
+                        # Pass data (DataFrame) as first argument
+                        consensus_result = self.consensus_engine.analyze(data, symbol, tf_str)
+
+                        if consensus_result.signal_type != 'HOLD':
+                            logger.info(f"Consensus Signal for {symbol} ({tf_str}): {consensus_result.signal_type}. Executing...")
+
+                            # Construct trade_params from TradeSignal object
+                            trade_params = {
+                                'entry_price': consensus_result.price,
+                                'sl_price': consensus_result.sl,
+                                'tp_price': consensus_result.tp,
+                                'volume': consensus_result.metadata.get('volume'),
+                                'sl_pips': consensus_result.metadata.get('sl_pips'),
+                                'tp_pips': consensus_result.metadata.get('tp_pips'),
+                                'limit_price': consensus_result.metadata.get('limit_price')
+                            }
+
+                            self.execute_trade(symbol, consensus_result.signal_type.lower(), trade_params, data, tf_str)
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
 
             except Exception as e:
                 logger.error(f"Error in monitor_market loop: {e}", exc_info=True)

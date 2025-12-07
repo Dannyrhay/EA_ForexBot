@@ -18,7 +18,10 @@ class LiquiditySweepStrategy(BaseStrategy):
             'volume_multiplier': 1.2,
             'enable_fvg': True,
             'enable_mss_confirmation': False,
+<<<<<<< HEAD
             'min_sl_atr_multiplier': 1.0,
+=======
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
             **params
         }
         self.min_sl_atr_multiplier = self.params.get('min_sl_atr_multiplier', 1.0)
@@ -236,6 +239,7 @@ class LiquiditySweepStrategy(BaseStrategy):
                             strength = min(strength, 1.0) # Cap strength at 1.0
 
                             # Define SL/TP based on the structure
+<<<<<<< HEAD
                             raw_sl = current_candle['low'] - (df['high'].iloc[-lookback:-1].max() - df['low'].iloc[-lookback:-1].min()) * 0.1
                             
                             # Enforce Minimum SL Distance
@@ -251,6 +255,12 @@ class LiquiditySweepStrategy(BaseStrategy):
                             tp = current_candle['close'] + (current_candle['close'] - sl) * 1.5 # Example 1.5 R:R
                             trade_params = {'sl': sl, 'tp': tp, 'source_strategy': self.name}
 
+=======
+                            sl = current_candle['low'] - (df['high'].iloc[-lookback:-1].max() - df['low'].iloc[-lookback:-1].min()) * 0.1
+                            tp = current_candle['close'] + (current_candle['close'] - sl) * 1.5 # Example 1.5 R:R
+                            trade_params = {'sl': sl, 'tp': tp, 'source_strategy': self.name}
+
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
                             logger.info(f"BUY SIGNAL for {symbol} on {timeframe}. Strength: {strength:.2f}")
                             return 'buy', strength, trade_params
 
@@ -277,6 +287,7 @@ class LiquiditySweepStrategy(BaseStrategy):
                             strength = min(strength, 1.0)
 
                             # Define SL/TP
+<<<<<<< HEAD
                             raw_sl = current_candle['high'] + (df['high'].iloc[-lookback:-1].max() - df['low'].iloc[-lookback:-1].min()) * 0.1
                             
                             # Enforce Minimum SL Distance
@@ -292,6 +303,12 @@ class LiquiditySweepStrategy(BaseStrategy):
                             tp = current_candle['close'] - (sl - current_candle['close']) * 1.5
                             trade_params = {'sl': sl, 'tp': tp, 'source_strategy': self.name}
 
+=======
+                            sl = current_candle['high'] + (df['high'].iloc[-lookback:-1].max() - df['low'].iloc[-lookback:-1].min()) * 0.1
+                            tp = current_candle['close'] - (sl - current_candle['close']) * 1.5
+                            trade_params = {'sl': sl, 'tp': tp, 'source_strategy': self.name}
+
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
                             logger.info(f"SELL SIGNAL for {symbol} on {timeframe}. Strength: {strength:.2f}")
                             return 'sell', strength, trade_params
 

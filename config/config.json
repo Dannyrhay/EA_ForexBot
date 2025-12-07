@@ -4,15 +4,24 @@
     "XAUUSDm"
   ],
   "timeframes": [
+<<<<<<< HEAD
     "M5",
     "M15"
+=======
+    "M5"
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
   ],
   "active_strategies": [
     "SMC",
     "LiquiditySweep",
     "Fibonacci",
+<<<<<<< HEAD
     "ADX",
     "MalaysianSnR"
+=======
+    "MalaysianSnR",
+    "ADX"
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
   ],
   "mt5_credentials": {
     "login": 247242118,
@@ -26,40 +35,70 @@
   "cooldown_period_minutes": 0,
   "max_trades_per_symbol": 5,
   "max_consecutive_trade_failures": 3,
+<<<<<<< HEAD
   "global_retrain_hours": 12,
   "initial_training_bars": 2500,
   "retrain_data_bars": 1500,
   "dxy_symbol": "DXYm",
   "ml_model_type": "XGBoost",
   "ml_primary_training_timeframe": "D1",
+=======
+  "global_retrain_hours": 18,
+  "initial_training_bars": 1500,
+  "retrain_data_bars": 1000,
+  "dxy_symbol": "DXYm",
+  "ml_model_type": "XGBoost",
+  "ml_primary_training_timeframe": "H1",
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
   "ml_training_window": 120,
   "ml_prediction_horizon": 20,
   "ml_target_definition": {
     "method": "price_change",
     "params": {
       "atr_period": 10,
+<<<<<<< HEAD
       "atr_multiplier": 1.2,
       "change_threshold_percent": 0.5,
       "prediction_horizon_for_change": 5
+=======
+      "atr_multiplier": 1.0,
+      "change_threshold_percent": 0.5,
+      "prediction_horizon_for_change": 10
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
     }
   },
   "ml_confidence_thresholds": {
     "buy": {
+<<<<<<< HEAD
       "default": 0.4,
       "XAUUSDm": 0.45
     },
     "sell": {
       "default": 0.4,
       "XAUUSDm": 0.45
+=======
+      "default": 0.25,
+      "XAUUSDm": 0.2
+    },
+    "sell": {
+      "default": 0.25,
+      "XAUUSDm": 0.2
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
     }
   },
   "risk_management": {
     "enabled": true,
     "method": "atr",
     "atr_params": {
+<<<<<<< HEAD
       "sl_multiplier": 1.5,
       "tp_risk_reward_ratio": 3,
       "atr_period": 14
+=======
+      "sl_multiplier": 1.7,
+      "tp_risk_reward_ratio": 3,
+      "atr_period": 10
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
     },
     "percentage_params": {
       "sl_percent": 1.0,
@@ -69,6 +108,7 @@
       "sl_pips": 30,
       "tp_pips": 75
     },
+<<<<<<< HEAD
     "max_risk_percent_per_trade": 1
   },
   "portfolio_risk": {
@@ -76,6 +116,9 @@
     "max_daily_drawdown_percent": 10.0,
     "max_portfolio_risk_percent": 50.0,
     "max_margin_level_percent": 25.0
+=======
+    "max_risk_percent_per_trade": 2.0
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
   },
   "ml_prediction_strategy_params": {
     "enabled": true
@@ -119,7 +162,18 @@
   "ml_scoring_metric": "f1_weighted",
   "ml_gridsearch_cv_jobs": 1,
   "ml_min_samples_for_fit": 50,
+<<<<<<< HEAD
   "features_to_remove_indices": [],
+=======
+  "features_to_remove_indices": [
+    1,
+    28,
+    29,
+    30,
+    31,
+    32
+  ],
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
   "feature_engineering": {
     "volatility_adjusted_indicators": true,
     "rate_of_change_periods": [
@@ -159,15 +213,26 @@
     "trend_ema_period": 50,
     "signal_strength": 0.3
   },
+<<<<<<< HEAD
   "smc_higher_timeframe": "H1",
   "smc_swing_lookback": 25,
   "smc_fvg_threshold": 0.0003,
   "smc_liquidity_tolerance": 0.0002,
+=======
+  "smc_higher_timeframe": "M15",
+  "smc_swing_lookback": 25,
+  "smc_fvg_threshold": 0.0003,
+  "smc_liquidity_tolerance": 0.0005,
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
   "smc_poi_search_range": 5,
   "smc_trade_cooldown": 0,
   "liquidity_sweep_params": {
     "lookback_period": 15,
+<<<<<<< HEAD
     "eq_level_tolerance": 0.0002,
+=======
+    "eq_level_tolerance": 0.0005,
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
     "ob_retrace_pct": 0.4,
     "volume_multiplier": 1,
     "enable_fvg": true,
@@ -179,6 +244,7 @@
   "snr_enable_rejection_filter": false,
   "snr_enable_miss_filter": false,
   "snr_enable_engulfing_filter": false,
+<<<<<<< HEAD
   "snr_trend_filter_enabled": true,
   "snr_trend_ema_period": 21,
   "adx_period": 14,
@@ -187,6 +253,14 @@
   "adx_strength_factor": 0.02,
   "adx_signal_filter": {
     "enabled": true,
+=======
+  "adx_period": 14,
+  "adx_di_period": 19,
+  "adx_threshold": 20,
+  "adx_strength_factor": 0.02,
+  "adx_signal_filter": {
+    "enabled": false,
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
     "min_adx_for_entry": 10,
     "min_adx_for_entry_BTCUSDm": 21,
     "require_di_confirmation": false,
@@ -195,6 +269,7 @@
   },
   "consensus_threshold": {
     "default": {
+<<<<<<< HEAD
       "low_vol": 0.4,
       "high_vol": 0.45,
       "vol_split": 0.005
@@ -202,6 +277,15 @@
     "BTCUSDm": {
       "low_vol": 0.35,
       "high_vol": 0.4,
+=======
+      "low_vol": 0.35,
+      "high_vol": 0.38,
+      "vol_split": 0.005
+    },
+    "BTCUSDm": {
+      "low_vol": 0.3,
+      "high_vol": 0.3,
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
       "vol_split": 0.01
     }
   },
@@ -323,12 +407,12 @@
       "trigger_profit_pips": 200,
       "secure_profit_type": "percentage_of_profit",
       "secure_profit_fixed_pips": 150,
-      "secure_profit_percentage": 100,
+      "secure_profit_percentage": 85,
       "trailing_active": true,
-      "trailing_method": "fixed_pips_behind",
+      "trailing_method": "atr_multiplier",
       "trailing_fixed_pips_value": 100,
-      "trailing_atr_multiplier_value": 2,
-      "trailing_atr_period": 14,
+      "trailing_atr_multiplier_value": 4,
+      "trailing_atr_period": 15,
       "trailing_percentage_value": 70
     }
   },

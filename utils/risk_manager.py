@@ -14,6 +14,7 @@ class RiskManager:
         self.config = config
         self.risk_config = config.get('risk_management', {})
         self.method = self.risk_config.get('method', 'atr').lower()
+<<<<<<< HEAD
         self._last_log_time = {} # [NEW] For throttling logs
         logger.info(f"RiskManager initialized with method: {self.method}")
 
@@ -31,14 +32,23 @@ class RiskManager:
 
     def calculate_atr(self, data, period=14):
         # ... (unchanged) ...
+=======
+        logger.info(f"RiskManager initialized with method: {self.method}")
+
+    def calculate_atr(self, data, period=14):
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
         """Calculate Average True Range from OHLC data."""
         if not isinstance(data, pd.DataFrame) or data.empty:
             return None
 
         if len(data) < period:
+<<<<<<< HEAD
             # Throttle this warning too
             if self._should_log(f"atr_insufficient_{len(data)}"):
                 logger.warning(f"Insufficient data for ATR calculation: {len(data)} < {period}")
+=======
+            logger.warning(f"Insufficient data for ATR calculation: {len(data)} < {period}")
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
             return None
 
         try:
@@ -54,6 +64,7 @@ class RiskManager:
             logger.error(f"Error calculating ATR: {e}")
             return None
 
+<<<<<<< HEAD
     # ... (calculate_sl_tp methods unchanged) ...
 
     def check_daily_drawdown(self, current_equity, daily_starting_equity):
@@ -149,6 +160,8 @@ class RiskManager:
 
         return True
 
+=======
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
     def calculate_sl_tp_atr(self, symbol, entry_price, direction, data):
         """
         Calculate SL and TP using ATR-based method.
@@ -339,4 +352,7 @@ class RiskManager:
         logger.info(f"Calculated position size for {symbol}: {position_size} lots (Risk: {max_risk_percent*100}%)")
 
         return position_size
+<<<<<<< HEAD
 
+=======
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82

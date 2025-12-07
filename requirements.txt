@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 backtesting==0.6.5
 blinker==1.9.0
 bokeh==3.8.1
@@ -40,3 +41,17 @@ urllib3==2.5.0
 Werkzeug==3.1.4
 xgboost==3.1.2
 xyzservices==2025.11.0
+=======
+MetaTrader5
+pandas
+numpy
+pymongo
+python-dotenv
+certifi
+requests
+textblob
+scikit-learn
+xgboost
+backtesting
+pytz
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82

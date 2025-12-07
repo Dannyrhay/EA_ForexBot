@@ -77,6 +77,7 @@ class MalaysianSnRStrategy:
         atr = tr.rolling(window=period).mean()
         return atr
 
+<<<<<<< HEAD
     def _calculate_ema(self, data, period):
         """Calculates Exponential Moving Average."""
         return data['close'].ewm(span=period, adjust=False).mean()
@@ -90,6 +91,17 @@ class MalaysianSnRStrategy:
         support_levels = []
         # Need at least 20 bars for ATR and lookahead
         if len(data) < 20: 
+=======
+    def identify_levels(self, data: pd.DataFrame) -> tuple[list, list]:
+        """
+        Identifies 'A' (resistance) and 'V' (support) shaped levels based on candle body patterns.
+        Includes Significance Filter: Price must move away by > 2 * ATR.
+        """
+        resistance_levels = []
+        support_levels = []
+        # Need at least 2 bars for the pattern (current + next)
+        if len(data) < 20: # Need enough data for ATR and lookahead
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
             return resistance_levels, support_levels
 
         atr_series = self._calculate_atr(data)
@@ -103,7 +115,11 @@ class MalaysianSnRStrategy:
             current_atr = atr_series.iloc[i]
             if np.isnan(current_atr) or current_atr == 0: continue
 
+<<<<<<< HEAD
             min_move = 1.5 * current_atr # STRICTER: 1.5 * ATR for significant levels
+=======
+            min_move = 0.5 * current_atr # RELAXED for Verification (was 2.0 * ATR)
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
 
             # Resistance 'A' Shape: Bullish candle followed by a Bearish candle.
             if self._is_bullish(current_candle) and self._is_bearish(next_candle):
@@ -300,10 +316,28 @@ class MalaysianSnRStrategy:
             return 'hold', min(features['strength'], 1.0), features
 
         # --- Final Signal Determination ---
+<<<<<<< HEAD
         atr = self._calculate_atr(df).iloc[-1]
 
         if buy_signal_strength > sell_signal_strength and buy_signal_strength >= 0.5: # Require at least 0.5 strength
             final_strength = min(buy_signal_strength, 1.0)
+=======
+        # --- Final Signal Determination ---
+        atr = self._calculate_atr(df).iloc[-1]
+
+        if buy_signal_strength > sell_signal_strength and buy_signal_strength > 0:
+            final_strength = min(buy_signal_strength, 1.0)
+
+            # Calculate SL/TP
+            # SL below the support level
+            nearest_sup = min(fresh_supports, key=lambda x: abs(x[1] - current_price))
+            level_price = nearest_sup[1]
+            sl_price = level_price - (atr * 1.5)
+            tp_price = current_price + (current_price - sl_price) * 2.0
+
+            logger.info(f"MalaysianSnR ({symbol} {timeframe}): BUY signal. Strength: {final_strength:.2f}, SL: {sl_price:.5f}, TP: {tp_price:.5f}")
+            return 'buy', final_strength, {'sl': sl_price, 'tp': tp_price}
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
 
             # Calculate SL/TP
             # SL below the support level

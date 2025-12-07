@@ -11,7 +11,10 @@ import xgboost as xgb
 import joblib
 import os
 from datetime import datetime
+<<<<<<< HEAD
 import warnings
+=======
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
 
 logger = logging.getLogger(__name__)
 
@@ -56,20 +59,27 @@ class MLValidator:
         for model_file in model_files:
             try:
                 model_path = os.path.join(self.model_dir, model_file)
+<<<<<<< HEAD
                 
                 # Suppress XGBoost UserWarning about model serialization
                 with warnings.catch_warnings():
                     warnings.filterwarnings("ignore", category=UserWarning, module="pickle")
                     model = joblib.load(model_path)
                 
+=======
+                model = joblib.load(model_path)
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
                 # Extract key from filename (e.g., "BTCUSDm_buy.joblib" -> "BTCUSDm_buy")
                 key = model_file.replace('.joblib', '')
                 self.predictors[key] = model
                 logger.info(f"Loaded existing model: {key}")
+<<<<<<< HEAD
                 
                 # Re-save the model to update serialization format if needed
                 self._save_model(key, model)
                 
+=======
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
             except Exception as e:
                 logger.error(f"Error loading model {model_file}: {e}")
 
@@ -240,8 +250,11 @@ class MLValidator:
             model = self.predictors[key]
 
             # Convert to numpy if needed
+<<<<<<< HEAD
             if isinstance(X, list):
                 X = np.array(X)
+=======
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
             if isinstance(X, pd.DataFrame):
                 X = X.values
 

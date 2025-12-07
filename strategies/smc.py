@@ -24,7 +24,10 @@ class SMCStrategy(BaseStrategy):
         self.liquidity_tolerance = 0.0005
         self.poi_search_range = 10
         self.trade_cooldown = 30
+<<<<<<< HEAD
         self.min_sl_atr_multiplier = 1.0
+=======
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
 
         # State Persistence
         self.last_trade_times = {}
@@ -47,7 +50,10 @@ class SMCStrategy(BaseStrategy):
         self.liquidity_tolerance = config.get('smc_liquidity_tolerance', self.liquidity_tolerance)
         self.poi_search_range = config.get('smc_poi_search_range', self.poi_search_range)
         self.trade_cooldown = config.get('smc_trade_cooldown', self.trade_cooldown)
+<<<<<<< HEAD
         self.min_sl_atr_multiplier = config.get('min_sl_atr_multiplier', self.min_sl_atr_multiplier)
+=======
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
 
     def in_cooldown(self, symbol):
         last_trade = self.last_trade_times.get(symbol)
@@ -147,6 +153,7 @@ class SMCStrategy(BaseStrategy):
         # For speed, we might skip HTF here or assume it was checked during POI creation
 
         signal_type = 'buy' if 'bullish' in poi['type'] else 'sell'
+<<<<<<< HEAD
         
         # Calculate ATR for Minimum SL Distance
         atr = self._calculate_atr(df)
@@ -163,10 +170,17 @@ class SMCStrategy(BaseStrategy):
             else:
                 sl = raw_sl
 
+=======
+
+        if signal_type == 'buy':
+            entry = poi['high']
+            sl = poi['low'] - (poi['high'] - poi['low']) * 0.1
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
             tp = entry + (entry - sl) * 2.0
             order_type = mt5.ORDER_TYPE_BUY_LIMIT
         else:
             entry = poi['low']
+<<<<<<< HEAD
             raw_sl = poi['high'] + (poi['high'] - poi['low']) * 0.1
             
             # Enforce Minimum SL Distance
@@ -176,6 +190,9 @@ class SMCStrategy(BaseStrategy):
             else:
                 sl = raw_sl
 
+=======
+            sl = poi['high'] + (poi['high'] - poi['low']) * 0.1
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
             tp = entry - (sl - entry) * 2.0
             order_type = mt5.ORDER_TYPE_SELL_LIMIT
 

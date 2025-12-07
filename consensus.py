@@ -17,12 +17,19 @@ def get_strategy_weights(lookback_days=30):
     return {}
 
 class ConsensusEngine:
+<<<<<<< HEAD
     def __init__(self, strategies: List[BaseStrategy], config: dict, ml_validator=None, regime_filter=None, bot_instance=None):
+=======
+    def __init__(self, strategies: List[BaseStrategy], config: dict, ml_validator=None, regime_filter=None):
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
         self.strategies = strategies
         self.config = config
         self.ml_validator = ml_validator
         self.regime_filter = regime_filter
+<<<<<<< HEAD
         self.bot_instance = bot_instance
+=======
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
         self.weights = get_strategy_weights(self.config.get('strategy_weighting_lookback_days', 30))
 
         # Cache for ADX strategy if present
@@ -241,6 +248,7 @@ class ConsensusEngine:
         except Exception as e:
             logger.error(f"ML Validation Error: {e}")
             return True # Fail open? Or fail closed?
+<<<<<<< HEAD
 
     def _get_ml_confidence(self, symbol: str, signal_type: str, data: pd.DataFrame) -> float:
         """
@@ -324,3 +332,5 @@ class ConsensusEngine:
                 logger.error(f"Error processing signal for {strategy.name}: {e}", exc_info=True)
 
         return valid_signals
+=======
+>>>>>>> 3bf0cf4babc04168161ee0889422e8e811a2ac82
