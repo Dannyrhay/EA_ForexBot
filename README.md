@@ -62,7 +62,7 @@ An advanced algorithmic trading system that combines multiple trading strategies
 
 ```bash
 git clone <repository-url>
-cd "ForexBot - Experiments (Long Trades)"
+cd "EA_ForexBot"
 ```
 
 ### 2. Backend Setup
@@ -92,7 +92,7 @@ Create a `.env` file in the root directory:
 ```env
 # MongoDB Connection
 MONGO_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/<database>?retryWrites=true&w=majority
-MONGO_DB_NAME=EA_TradingBot
+MONGO_DB_NAME=EA_ForexBot
 
 # MT5 Credentials (optional - can be set via UI)
 MT5_LOGIN_ID=your_login_id
