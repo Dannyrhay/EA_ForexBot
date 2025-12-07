@@ -16,7 +16,7 @@ if not logger.handlers:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
-def save_trade(trade_data, update=False): 
+def save_trade(trade_data, update=False):
     """
     Save or update a trade in MongoDB.
     Args:
@@ -26,7 +26,7 @@ def save_trade(trade_data, update=False):
                        (This logic might be better handled by specific update functions like update_trade_status)
     """
     trades_collection = MongoDBConnection.get_trades_collection()
-    if not trades_collection:
+    if trades_collection is None:
         logger.error(f"Cannot save trade, MongoDB not connected or collection not found. Trade for order_id {trade_data.get('order_id')} not saved.")
         # Optionally, implement a fallback to CSV here if critical
         return
@@ -113,7 +113,7 @@ def update_trade_status(order_id_to_update, update_data_dict):
                                  'exit_time' should be a datetime object.
     """
     trades_collection = MongoDBConnection.get_trades_collection()
-    if not trades_collection:
+    if trades_collection is None:
         logger.error(f"Cannot update trade status for order_id {order_id_to_update}, MongoDB not connected or collection not found.")
         return False # Indicate failure
 
@@ -211,7 +211,7 @@ def get_strategy_weights(lookback_days=30):
     }
 
     trades_collection = MongoDBConnection.get_trades_collection()
-    if not trades_collection:
+    if trades_collection is None:
         logger.warning("Cannot calculate strategy weights, MongoDB not connected. Returning default weights.")
         return default_initial_weights
 

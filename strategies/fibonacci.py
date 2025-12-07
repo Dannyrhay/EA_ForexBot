@@ -1,6 +1,9 @@
 from .base_strategy import BaseStrategy
 import pandas as pd
 import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
 
 class FibonacciStrategy(BaseStrategy):
     """
@@ -13,14 +16,15 @@ class FibonacciStrategy(BaseStrategy):
     The strategy provides its own Stop Loss (at the 100% level) and Take Profit
     (at the 0% level) for a self-contained trading setup.
     """
-    def __init__(self, name, swing_lookback=200, trend_ema_period=200, strength=0.85):
+    def __init__(self, name, swing_lookback=100, trend_ema_period=50, strength=0.7):
         super().__init__(name)
         self.swing_lookback = swing_lookback
         self.trend_ema_period = trend_ema_period
         self.strength = strength
         self.fib_levels = {
-            'level_1': 0.382, # Start of the Golden Zone
-            'level_2': 0.618  # Key rejection level (end of Golden Zone)
+            'entry': 0.236, # Relaxed entry: Start of the Zone (was 0.382)
+            'test': 0.382,  # Relaxed test: Must touch this level (was 0.618)
+            'deep': 0.618   # Deepest part of the zone
         }
 
     def get_signal(self, data: pd.DataFrame, symbol: str = None, timeframe: str = None):
@@ -71,31 +75,37 @@ class FibonacciStrategy(BaseStrategy):
                 fib_range = swing_high_price - swing_low_price
                 if fib_range <= 0: return ('hold', 0.0, None)
 
-                # Define the Golden Zone levels for a BUY
-                golden_zone_start = swing_high_price - (fib_range * self.fib_levels['level_1']) # 38.2% level
-                golden_zone_end = swing_high_price - (fib_range * self.fib_levels['level_2'])   # 61.8% level
+                # Define the Zone levels for a BUY
+                # Zone starts at 23.6% retracement, requires test of 38.2%
+                zone_start = swing_high_price - (fib_range * self.fib_levels['entry']) # 23.6% level
+                test_level = swing_high_price - (fib_range * self.fib_levels['test'])  # 38.2% level
+                deep_level = swing_high_price - (fib_range * self.fib_levels['deep'])  # 61.8% level
 
                 # Check for entry conditions on the last fully formed candle
                 prev_candle = data.iloc[-2]
 
-                # Condition 1: Price must have entered the Golden Zone
-                # The low of the previous candle went into or below the zone
-                price_entered_zone = prev_candle['low'] <= golden_zone_start
+                # Condition 1: Price must have entered the Zone (passed 23.6%)
+                price_entered_zone = prev_candle['low'] <= zone_start
 
-                # Condition 2: 61.8% level must have been tested
-                # The low of the previous candle touched or went below the 61.8% level
-                level_tested = prev_candle['low'] <= golden_zone_end
+                # Condition 2: Must have tested the "test" level (38.2%)
+                # Relaxed from 61.8% to catch strong trends
+                level_tested = prev_candle['low'] <= test_level
 
-                # Condition 3: Confirmation - Candle closed back ABOVE the 61.8% level
+                # Condition 3: Confirmation - Candle closed back ABOVE the test level
                 # This shows rejection of lower prices.
-                closed_above_level = prev_candle['close'] > golden_zone_end
+                closed_above_level = prev_candle['close'] > test_level
 
                 if price_entered_zone and level_tested and closed_above_level:
                     sl_price = swing_low_price
-                    tp_price = swing_high_price
-                    trade_params = {'sl': sl_price, 'tp': tp_price, 'source_strategy': 'Fibonacci'}
-                    # print(f"Fibonacci BUY for {symbol} on {timeframe}: Rejection confirmed at {golden_zone_end:.5f}. SL: {sl_price:.5f} TP: {tp_price:.5f}")
+                    # Target -0.27 extension for better R:R
+                    tp_price = swing_high_price + (fib_range * 0.27)
+                    # [NEW] Use Limit Order at the test level (38.2%) for better entry
+                    limit_price = test_level
+                    trade_params = {'sl': sl_price, 'tp': tp_price, 'limit_price': limit_price, 'source_strategy': 'Fibonacci'}
+                    logger.info(f"Fibonacci BUY for {symbol} on {timeframe}: Rejection confirmed at {test_level:.5f}. Limit: {limit_price:.5f} SL: {sl_price:.5f} TP: {tp_price:.5f}")
                     return ('buy', self.strength, trade_params)
+                else:
+                    logger.debug(f"Fibonacci BUY failed for {symbol}: Entered={price_entered_zone}, Tested382={level_tested}, ClosedAbove={closed_above_level}, Zone=[{test_level:.5f}-{zone_start:.5f}], PrevLow={prev_candle['low']:.5f}, PrevClose={prev_candle['close']:.5f}")
 
             # Scenario for a SELL signal (Dominant trend is DOWN)
             elif is_downtrend:
@@ -104,28 +114,34 @@ class FibonacciStrategy(BaseStrategy):
                 fib_range = swing_high_price - swing_low_price
                 if fib_range <= 0: return ('hold', 0.0, None)
 
-                # Define the Golden Zone levels for a SELL
-                golden_zone_start = swing_low_price + (fib_range * self.fib_levels['level_1']) # 38.2% level
-                golden_zone_end = swing_low_price + (fib_range * self.fib_levels['level_2'])   # 61.8% level
+                # Define the Zone levels for a SELL
+                zone_start = swing_low_price + (fib_range * self.fib_levels['entry']) # 23.6% level
+                test_level = swing_low_price + (fib_range * self.fib_levels['test'])  # 38.2% level
+                deep_level = swing_low_price + (fib_range * self.fib_levels['deep'])  # 61.8% level
 
                 # Check for entry conditions on the last fully formed candle
                 prev_candle = data.iloc[-2]
 
-                # Condition 1: Price must have entered the Golden Zone
-                price_entered_zone = prev_candle['high'] >= golden_zone_start
+                # Condition 1: Price must have entered the Zone
+                price_entered_zone = prev_candle['high'] >= zone_start
 
-                # Condition 2: 61.8% level must have been tested
-                level_tested = prev_candle['high'] >= golden_zone_end
+                # Condition 2: Must have tested the "test" level
+                level_tested = prev_candle['high'] >= test_level
 
-                # Condition 3: Confirmation - Candle closed back BELOW the 61.8% level
-                closed_below_level = prev_candle['close'] < golden_zone_end
+                # Condition 3: Confirmation - Candle closed back BELOW the test level
+                closed_below_level = prev_candle['close'] < test_level
 
                 if price_entered_zone and level_tested and closed_below_level:
                     sl_price = swing_high_price
-                    tp_price = swing_low_price
-                    trade_params = {'sl': sl_price, 'tp': tp_price, 'source_strategy': 'Fibonacci'}
-                    # print(f"Fibonacci SELL for {symbol} on {timeframe}: Rejection confirmed at {golden_zone_end:.5f}. SL: {sl_price:.5f} TP: {tp_price:.5f}")
+                    # Target -0.27 extension for better R:R
+                    tp_price = swing_low_price - (fib_range * 0.27)
+                    # [NEW] Use Limit Order at the test level (38.2%) for better entry
+                    limit_price = test_level
+                    trade_params = {'sl': sl_price, 'tp': tp_price, 'limit_price': limit_price, 'source_strategy': 'Fibonacci'}
+                    logger.info(f"Fibonacci SELL for {symbol} on {timeframe}: Rejection confirmed at {test_level:.5f}. Limit: {limit_price:.5f} SL: {sl_price:.5f} TP: {tp_price:.5f}")
                     return ('sell', self.strength, trade_params)
+                else:
+                    logger.debug(f"Fibonacci SELL failed for {symbol}: Entered={price_entered_zone}, Tested382={level_tested}, ClosedBelow={closed_below_level}, Zone=[{zone_start:.5f}-{test_level:.5f}], PrevHigh={prev_candle['high']:.5f}, PrevClose={prev_candle['close']:.5f}")
 
             return ('hold', 0.0, None)
 

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import sys
 from flask import Flask, jsonify, logging as flask_logging, request, render_template, send_from_directory # Renamed logging to flask_logging
 from flask_cors import CORS
@@ -8,6 +8,7 @@ import threading
 import MetaTrader5 as mt5
 import pandas as pd
 import numpy as np
+import random
 
 # Define TRADE_LOG_FILE at the global scope for app.py's own use (e.g., fallbacks)
 TRADE_LOG_FILE = "trades_history_fallback.csv"
@@ -140,7 +141,13 @@ def get_equity_curve_api():
             equity_data = bot.get_equity_curve_data(limit_points=limit)
             if "error" in equity_data:
                  return jsonify(equity_data), 500
-            return jsonify(equity_data)
+            # [NEW] Format for Recharts: [{time: '...', equity: 123}, ...]
+            formatted_data = []
+            if "labels" in equity_data and "equity" in equity_data:
+                for t, e in zip(equity_data["labels"], equity_data["equity"]):
+                    formatted_data.append({"time": t, "equity": e})
+            
+            return jsonify(formatted_data)
         except Exception as e:
             logger.error(f"Error in /api/equity_curve endpoint: {e}", exc_info=True)
             return jsonify({"labels": [], "equity": [], "error": f"Internal server error: {str(e)}"}), 500
@@ -156,6 +163,122 @@ def get_status():
     # Fallback status
     return jsonify({ "bot_status": "ERROR_API", "balance": "N/A", "equity": "N/A", "free_margin": "N/A", "margin_level": "N/A", "last_ml_retrain": "Never", "last_error": "Bot instance unavailable."}), 503
 
+@app.route('/api/account_info')
+def account_info():
+    bot = get_bot()
+    if bot and hasattr(bot, 'get_bot_status_for_ui'):
+        status = bot.get_bot_status_for_ui()
+        balance = status.get("balance", 0.0)
+        equity = status.get("equity", 0.0)
+        # Handle "N/A" string values
+        if isinstance(balance, str):
+            balance = 0.0
+        if isinstance(equity, str):
+            equity = 0.0
+        
+        # Calculate weekly growth from equity curve
+        weekly_growth = 0.0
+        try:
+            if hasattr(bot, 'get_equity_curve_data'):
+                equity_data = bot.get_equity_curve_data(limit_points=500)
+                # equity_data format: {"labels": ["2025-12-01 10:00", ...], "equity": [1000.0, ...]}
+                labels = equity_data.get('labels', [])
+                equities = equity_data.get('equity', [])
+                
+                if labels and equities and len(labels) == len(equities):
+                    # Get start of current week (Monday)
+                    today = datetime.now(timezone.utc)
+                    start_of_week = today - timedelta(days=today.weekday())
+                    start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
+                    
+                    # Find the earliest equity value from this week
+                    week_start_equity = None
+                    current_equity = equities[-1] if equities else equity
+                    
+                    for i, label in enumerate(labels):
+                        try:
+                            # Labels are in format '%Y-%m-%d %H:%M'
+                            point_time = datetime.strptime(label, '%Y-%m-%d %H:%M').replace(tzinfo=timezone.utc)
+                            if point_time >= start_of_week:
+                                week_start_equity = equities[i]
+                                break
+                        except:
+                            continue
+                    
+                    # If no data from this week, use the most recent data point before this week
+                    if week_start_equity is None and labels:
+                        for i in range(len(labels) - 1, -1, -1):
+                            try:
+                                point_time = datetime.strptime(labels[i], '%Y-%m-%d %H:%M').replace(tzinfo=timezone.utc)
+                                if point_time < start_of_week:
+                                    week_start_equity = equities[i]
+                                    break
+                            except:
+                                continue
+                    
+                    if week_start_equity and week_start_equity > 0:
+                        weekly_growth = round(((current_equity - week_start_equity) / week_start_equity) * 100, 2)
+        except Exception as e:
+            logger.warning(f"Error calculating weekly growth: {e}")
+        
+        return jsonify({
+            "balance": balance,
+            "equity": equity,
+            "profit": equity - balance,
+            "win_rate": status.get("win_rate", 0.0),
+            "session_pl": status.get("session_pl", 0.0),
+            "bot_status": status.get("bot_status", "UNKNOWN"),
+            "weekly_growth": weekly_growth
+        })
+    
+    # Fallback mock data
+    return jsonify({
+        "balance": 0.0,
+        "equity": 0.0,
+        "profit": 0.0,
+        "win_rate": 0.0,
+        "session_pl": 0.0,
+        "weekly_growth": 0.0
+    })
+
+@app.route('/api/signals')
+def signals():
+    bot = get_bot()
+    if bot and hasattr(bot, 'get_recent_signals_for_ui'):
+        return jsonify(bot.get_recent_signals_for_ui())
+    return jsonify([])
+
+@app.route('/api/strategy_performance')
+def strategy_performance():
+    bot = get_bot()
+    if bot and hasattr(bot, 'get_strategy_performance_for_ui'):
+        return jsonify(bot.get_strategy_performance_for_ui())
+    return jsonify([])
+
+@app.route('/api/strategies/details')
+def strategies_details():
+    bot = get_bot()
+    if bot and hasattr(bot, 'get_strategy_details_for_ui'):
+        return jsonify(bot.get_strategy_details_for_ui())
+    return jsonify([])
+
+@app.route('/api/strategies/<strategy_id>/toggle', methods=['POST'])
+def toggle_strategy(strategy_id):
+    bot = get_bot()
+    if not bot or not hasattr(bot, 'toggle_strategy'):
+        return jsonify({"status": "error", "message": "Bot not initialized"}), 500
+
+    data = request.json
+    enabled = data.get('enabled')
+    if enabled is None:
+        return jsonify({"status": "error", "message": "Missing 'enabled' field"}), 400
+        
+    success = bot.toggle_strategy(strategy_id, enabled)
+    if success:
+        return jsonify({"status": "success", "enabled": enabled})
+    else:
+        return jsonify({"status": "error", "message": "Failed to toggle strategy"}), 500
+
 @app.route('/api/open_positions', methods=['GET'])
 def get_open_positions():
     bot = get_bot()
@@ -165,6 +288,20 @@ def get_open_positions():
         except Exception as e:
             logger.error(f"Error in /api/open_positions: {e}", exc_info=True)
             return jsonify({"error": "Failed to fetch open positions."}), 500
+    return jsonify([]), 503
+
+@app.route('/api/trades', methods=['GET'])
+def get_all_trades_api():
+    """
+    Returns a combined list of active and closed trades for the Advanced Trade Table.
+    """
+    bot = get_bot()
+    if bot and hasattr(bot, 'get_all_trades_for_ui'):
+        try:
+            return jsonify(bot.get_all_trades_for_ui())
+        except Exception as e:
+            logger.error(f"Error in /api/trades: {e}", exc_info=True)
+            return jsonify({"error": "Failed to fetch trades."}), 500
     return jsonify([]), 503
 
 @app.route('/api/trade_history', methods=['GET'])
@@ -339,8 +476,8 @@ def force_full_ml_training_api():
 @app.route('/api/backtest/strategies', methods=['GET'])
 def get_backtest_strategies_api():
     try:
-        # --- MODIFIED LINE ---
-        supported_strategies = [ "Scalping", "SMA", "BollingerBands", "LiquiditySweep","ADX", "KeltnerChannels","Fibonacci", "MalaysianSnR", "SMC" ]
+        # Only include strategies that actually exist
+        supported_strategies = ["LiquiditySweep", "ADX", "Fibonacci", "MalaysianSnR", "SMC"]
         return jsonify({"strategies": supported_strategies})
     except Exception as e:
         return jsonify({"error": f"Could not load strategies: {str(e)}"}), 500

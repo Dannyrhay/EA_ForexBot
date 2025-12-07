@@ -4,4 +4,3 @@ test_smtp.py
 test_strategies.py
 trades.csv
 .env
-__pycache__

@@ -22,7 +22,7 @@ class MongoDBConnection:
     _db = None
 
     # Defaults from your provided connection string
-    DEFAULT_MONGO_URI = ""
+    DEFAULT_MONGO_URI = "mongodb+srv://EA_TradingBot:pykOSLpNP9k1jMre@cluster0.0mk8h.mongodb.net/"
     DEFAULT_DB_NAME = "EA_TradingBot"
 
     @classmethod
@@ -103,9 +103,33 @@ class MongoDBConnection:
     def get_trades_collection(cls):
         """Returns the 'trades' collection. Ensures DB is connected."""
         db = cls.get_db()
-        if db:
+        if db is not None:
             return db.trades # 'trades' is the collection name
         return None
+
+    @classmethod
+    def get_market_data_collection(cls):
+        """Returns the 'market_data' collection."""
+        db = cls.get_db()
+        if db is not None:
+            return db.market_data
+        return None
+
+    @classmethod
+    def store_market_snapshot(cls, symbol, bid, ask, timestamp):
+        """Stores a market snapshot (tick data) in MongoDB."""
+        collection = cls.get_market_data_collection()
+        if collection is not None:
+            try:
+                doc = {
+                    "symbol": symbol,
+                    "bid": bid,
+                    "ask": ask,
+                    "timestamp": timestamp
+                }
+                collection.insert_one(doc)
+            except Exception as e:
+                logger.error(f"Failed to store market snapshot: {e}")
 
 # Example of how to use it (optional, for testing)
 if __name__ == '__main__':
@@ -116,7 +140,7 @@ if __name__ == '__main__':
     # export MONGODB_DATABASE_NAME="your_db_name"
 
     db_instance = MongoDBConnection.connect()
-    if db_instance:
+    if db_instance is not None:
         logger.info(f"Connected to DB: {db_instance.name}")
         trades_collection = MongoDBConnection.get_trades_collection()
         if trades_collection is not None:

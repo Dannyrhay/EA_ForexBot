@@ -8,29 +8,20 @@ import MetaTrader5 as mt5
 # --- Core Backtesting and Project Imports ---
 try:
     from backtesting import Backtest, Strategy
-except ImportError:
-    print("Backtesting.py library not found. Please install it: pip install backtesting")
-    # Define dummy classes if backtesting.py is not installed, so the script can be loaded.
-    class Strategy: pass
-    class Backtest: pass
 
-try:
-    # Import all strategies from the strategies directory
-    from strategies.sma import SMAStrategy
-    from strategies.bollinger_bands import BollingerBandsStrategy
+    # Import existing strategies
     from strategies.liquidity_sweep import LiquiditySweepStrategy
     from strategies.fibonacci import FibonacciStrategy
     from strategies.malaysian_snr import MalaysianSnRStrategy
     from strategies.smc import SMCStrategy
     from strategies.adx_strategy import ADXStrategy
-    from strategies.keltner_channels_strategy import KeltnerChannelsStrategy
-    from strategies.scalping_strategy import ScalpingStrategy # Added ScalpingStrategy
 
-    # Import necessary components from the main application and utils
-    from strategies.ml_model import MLValidator
+    # Import utilities
     from utils.mt5_connection import connect_mt5, get_data as get_historical_data_from_mt5
     from utils.logging import setup_logging
-    from main import TradingBot # Used to access feature extraction and config
+
+    # Import TradingBot for config and feature extraction
+    from main import TradingBot
 except ImportError as e:
     print(f"Error importing project modules in backtester.py: {e}. Ensure paths are correct and all dependencies are installed.")
     # Define dummy classes and functions if imports fail to allow the script to be parsed.
@@ -981,4 +972,3 @@ def run_backtest_main(strategy_name, symbol, timeframe_str, start_date_str, end_
 
 if __name__ == '__main__':
     logger.info("backtester.py can be run directly for testing. Ensure MT5 is configured and running.")
-   
